@@ -8,7 +8,7 @@ import os
 import json
 import asyncio
 from typing import List, Dict, Any, Optional
-from openai import AzureOpenAI
+from openai import AsyncAzureOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,8 +19,8 @@ AZURE_API_KEY = os.getenv("AZURE_API_KEY", "default-key")
 AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", "2025-01-01-preview")
 CHAT_MODEL = "gpt-5.4-nano"
 
-# Initialize Azure OpenAI client
-client = AzureOpenAI(
+# Initialize async Azure OpenAI client
+client = AsyncAzureOpenAI(
     azure_endpoint=AZURE_ENDPOINT,
     api_key=AZURE_API_KEY,
     api_version=AZURE_API_VERSION,

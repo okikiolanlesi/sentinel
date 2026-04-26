@@ -31,20 +31,11 @@ class FraudAnalysisPlugin(KernelBaseModel):
     """Semantic Kernel plugin for fraud analysis operations"""
 
     @kernel_function(description="Analyse a message for fraud indicators")
-    def scan_message(self, content: str, message_type: str, sender: Optional[str] = None) -> str:
+    async def scan_message(self, content: str, message_type: str, sender: Optional[str] = None) -> str:
         """
         Scan a message for fraud indicators using AI.
-
-        Args:
-            content: Message content to analyse
-            message_type: Type of message (sms, whatsapp, transcript)
-            sender: Optional sender identifier
-
-        Returns:
-            JSON string with analysis results
         """
-        import asyncio
-        result = asyncio.run(analyse_message(content, message_type, sender))
+        result = await analyse_message(content, message_type, sender)
         return str(result)
 
     @kernel_function(description="Check sender's history for previous flags")

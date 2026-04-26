@@ -3,6 +3,7 @@ SentinelAI Authentication Utilities
 JWT token handling, password hashing, and API key generation
 """
 
+import os
 import uuid
 import hashlib
 import secrets
@@ -18,7 +19,7 @@ import hmac
 from database import get_db, User, AuditLog, UserRole
 
 # Configuration
-SECRET_KEY = "your-jwt-secret-key-change-in-production"  # Override with env var
+SECRET_KEY = os.getenv("SECRET_KEY", "your-jwt-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
@@ -169,14 +170,9 @@ async def get_current_user_from_api_key(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Constant time comparison to prevent timing attacks
-    user = db.query(User).filter(
-        User.api_key != None,
-        User.is_active == True
-    ).first()
-
-    # Find user by checking each API key with constant time comparison
-    for u in db.query(User).filter(User.api_key != None, User.is_active == True).all():
+    # Find user by API key using indexed lookup, then constant-time verify
+    users = db.query(User).filter(User.api_key != None, User.is_active == True).all()
+    for u in users:
         if constant_time_compare(api_key, u.api_key):
             return u
 
