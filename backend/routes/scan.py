@@ -488,3 +488,25 @@ async def scan_via_api_key(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"API scan failed: {str(e)}"
         )
+
+
+# --- Model Evaluation Endpoint ---
+@router.get("/evaluate", summary="Run model evaluation against Nigerian scam dataset")
+async def evaluate_model(current_user=Depends(require_role("admin"))):
+    """
+    Runs SentinelAI against the built-in evaluation dataset.
+    Returns accuracy metrics and per-sample results.
+    Admin only.
+    """
+    from ai.scanner import evaluate_model_performance
+    try:
+        results = await evaluate_model_performance()
+        return {
+            "status": "evaluation_complete",
+            "accuracy_percent": results["accuracy"],
+            "correct": results["correct"],
+            "total": results["total"],
+            "results": results["results"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
