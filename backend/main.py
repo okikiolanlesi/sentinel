@@ -14,10 +14,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from database import init_db, get_db, User, UserRole
+from database import init_db, get_db, User, UserRole, SessionLocal
 from auth_utils import hash_password, generate_api_key
 from routes import auth, scan, voice, dashboard, users
 
@@ -43,7 +42,7 @@ async def lifespan(app: FastAPI):
     print("✓ Database initialized")
 
     # Create default admin user if none exists
-    db = Session()
+    db = SessionLocal()
     try:
         admin_exists = db.query(User).filter(User.role == UserRole.ADMIN).first()
         if not admin_exists:

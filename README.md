@@ -1,377 +1,239 @@
-# SentinelAI 🛡️
+# SentinelAI — Telecom Fraud Intelligence SaaS
 
-**Telecom Fraud Intelligence Platform**
+> **TeKnowledge × Microsoft 2026 Agentic AI Hackathon**  
+> Theme: *Trust, Safety & Fraud Intelligence in Telecom Networks*
 
-> Real-time AI-powered scam detection, deepfake voice analysis, and fraud risk scoring for banks, fintechs, telcos, and call centers across Africa.
-
-Built at the **TeKnowledge x Microsoft 2026 Agentic AI Hackathon** — powered by Azure OpenAI and Microsoft Semantic Kernel.
-
----
-
-## The Problem
-
-Telecom fraud costs African financial institutions billions annually. Scammers impersonate banks via SMS, clone executive voices using AI, and manipulate call center agents into approving fraudulent transfers. Fraud teams currently investigate these threats manually — slowly, reactively, and at massive scale.
-
-**SentinelAI changes that.**
+AI-powered B2B platform that detects scams, fraud, and deepfake voices in real-time across SMS, WhatsApp, and phone calls. Built for banks, fintechs, telcos, and call centers.
 
 ---
 
-## What SentinelAI Does
+## Demo credentials (default admin, auto-created on first run)
 
-| Capability | Description |
-|-----------|-------------|
-| 🔍 Scam Message Detection | LLM-based analysis of SMS, WhatsApp, and call transcripts for fraud patterns |
-| 🎙️ Deepfake Voice Detection | Transcribes calls via Whisper and analyses for AI-generated voice and social engineering |
-| ⚡ Real-time Risk Scoring | Every communication scored 0–100 with contextual intelligence |
-| 📊 Admin Dashboard | Live threat feed, KPIs, fraud trends, and campaign detection |
-| 🔐 Enterprise Auth | JWT authentication with role-based access control (Admin/Analyst/Viewer) |
-| 👥 User Management | Team management, invite, deactivate, and role assignment |
-| 📋 Audit Trail | Full logging of every action for compliance and accountability |
-| 🔌 Integration API | One API call to plug SentinelAI into any existing system |
+| Field | Value |
+|---|---|
+| Email | `admin@sentinelai.io` |
+| Password | `SentinelAdmin2026!` |
 
 ---
 
-## Who It's For
+## Quick start
 
-- **Banks** — GTBank, Access Bank, Zenith, First Bank
-- **Fintechs** — Opay, Palmpay, Moniepoint, Kuda
-- **Telcos** — MTN, Airtel, Glo
-- **Call Centers** — Any organisation receiving high volumes of inbound calls
-- **Government** — CBN, NCC for national fraud intelligence
+### Backend
 
----
+```bash
+cd backend
 
-## Tech Stack
+# 1. Install dependencies
+pip install -r requirements.txt
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI (Python) |
-| Database | SQLite (demo) → Azure SQL (production) |
-| Authentication | JWT + bcrypt + RBAC |
-| AI Model | Azure OpenAI GPT-5.4-nano via Microsoft AI Foundry |
-| Speech-to-Text | Azure Whisper |
-| Text-to-Speech | gpt-4o-mini-tts |
-| AI Orchestration | Microsoft Semantic Kernel |
-| Frontend | React + Tailwind CSS |
-| Deployment | Railway (demo) → Azure App Service (production) |
+# 2. Configure your Azure credentials
+cp .env.example .env
+# Open .env and set AZURE_API_KEY (the only field you must fill in)
+
+# 3. Run
+uvicorn main:app --reload
+# → http://localhost:8000
+# → http://localhost:8000/docs  (Swagger UI)
+```
+
+The default admin account (`admin@sentinelai.io`) is created automatically on first startup.
+
+### Frontend
+
+```bash
+cd frontend
+
+# 1. Install dependencies
+npm install
+
+# 2. Configure backend URL (optional for local dev — defaults to localhost:8000)
+cp .env.example .env
+
+# 3. Run
+npm run dev
+# → http://localhost:5173
+```
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    CLIENT LAYER                          │
-│         React Frontend  │  External API (Banks/Telcos)  │
-└────────────────┬────────────────────────┬───────────────┘
-                 │                        │
-                 ▼                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   FASTAPI BACKEND                        │
-│  /auth  │  /scan  │  /voice  │  /users  │  /dashboard  │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│              SEMANTIC KERNEL PIPELINE                    │
-│                                                          │
-│  scan_message → check_sender_history → generate_alert   │
-│                       → recommend_action                 │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│            AZURE AI FOUNDRY (Microsoft)                  │
-│   GPT-5.4-nano  │  Whisper STT  │  gpt-4o-mini-tts     │
-└────────────────┬────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│                    DATA LAYER                            │
-│        SQLite DB  │  AuditLog  │  ScanResults           │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## How It Works
-
-**For a bank like GTBank:**
-
-1. A scammer sends a fake SMS to a GTBank customer: *"Your account is suspended. Verify your BVN at gtb-verify-now.com"*
-2. GTBank's SMS gateway forwards the message to SentinelAI via one API call
-3. Semantic Kernel runs a multi-step analysis pipeline
-4. GPT-5.4-nano detects urgency language, fake domain, and bank impersonation
-5. Risk score returned: **94/100 — HIGH THREAT — BLOCK**
-6. Message is blocked before the customer ever sees it
-7. GTBank's fraud team sees the alert on their dashboard in real time
-
-**Total time: under 2 seconds.**
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- Azure AI Foundry API key (GPT-5.4-nano + Whisper deployed)
-
-### Backend Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/SentinelAI-Team/sentinelai.git
-cd sentinelai/backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your Azure credentials
-
-# Start the server
-uvicorn main:app --reload
-```
-
-Server runs at: `http://localhost:8000`
-API docs at: `http://localhost:8000/docs`
-
-### Frontend Setup
-
-```bash
-cd sentinelai/frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-Frontend runs at: `http://localhost:5173`
-
----
-
-## Environment Variables
-
-```env
-AZURE_ENDPOINT=https://your-endpoint.cognitiveservices.azure.com
-AZURE_API_KEY=your-azure-api-key
-AZURE_API_VERSION=2025-01-01-preview
-SECRET_KEY=your-jwt-secret-key-change-in-production
-DATABASE_URL=sqlite:///./sentinelai.db
-ENVIRONMENT=development
-```
-
----
-
-## Default Admin Account
-
-On first startup, SentinelAI creates a default admin:
-
-```
-Email:    admin@sentinelai.io
-Password: SentinelAdmin2026!
-```
-
-Change this immediately in production.
-
----
-
-## API Reference
-
-### Authentication
-
-```bash
-# Register
-POST /api/auth/register
-{
-  "email": "analyst@gtbank.com",
-  "password": "securepassword",
-  "full_name": "John Adeyemi",
-  "organisation": "GTBank"
-}
-
-# Login
-POST /api/auth/login
-{
-  "email": "analyst@gtbank.com",
-  "password": "securepassword"
-}
-# Returns: { "access_token": "eyJ...", "token_type": "bearer" }
-```
-
-### Scan a Message
-
-```bash
-# Via JWT (internal dashboard users)
-POST /api/scan/message
-Authorization: Bearer eyJ...
-{
-  "content": "Your GTBank account is suspended. Verify now at gtb-verify.com",
-  "message_type": "sms",
-  "sender": "+2348030001234"
-}
-
-# Response
-{
-  "risk_score": 94,
-  "threat_level": "HIGH",
-  "action": "BLOCK",
-  "flags": ["fake_domain", "urgency_language", "bank_impersonation"],
-  "reasoning": "Message impersonates GTBank with a fake domain and urgency tactics.",
-  "is_scam": true
-}
-```
-
-### External Integration (Banks/Telcos)
-
-```bash
-# Via API Key (plug into existing SMS gateway)
-POST /api/scan/api
-X-API-Key: sk-sentinel-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-{
-  "content": "Congratulations! You won ₦500,000. Claim at cbn-reward.net",
-  "message_type": "sms",
-  "sender": "+2348055554444"
-}
-```
-
-### Voice Analysis
-
-```bash
-# Upload suspicious call audio
-POST /api/voice/analyse
-Authorization: Bearer eyJ...
-Content-Type: multipart/form-data
-file: [audio.mp3]
-
-# Response
-{
-  "transcript": "Hello this is the MD calling from head office...",
-  "deepfake_probability": 89,
-  "risk_score": 91,
-  "threat_level": "HIGH",
-  "flags": ["executive_impersonation", "urgent_transfer_request", "deepfake_voice_patterns"],
-  "reasoning": "High deepfake probability detected. Caller exhibits social engineering patterns."
-}
-```
-
----
-
-## Role Permissions
-
-| Action | Admin | Analyst | Viewer |
-|--------|-------|---------|--------|
-| View dashboard | ✅ | ✅ | ✅ |
-| Scan messages | ✅ | ✅ | ❌ |
-| Analyse voice | ✅ | ✅ | ❌ |
-| View scan history | ✅ | ✅ | ❌ |
-| Manage users | ✅ | ❌ | ❌ |
-| View audit log | ✅ | ❌ | ❌ |
-| Generate API keys | ✅ | ✅ | ❌ |
-| Batch scan | ✅ | ❌ | ❌ |
-
----
-
-## Project Structure
-
-```
 sentinelai/
 ├── backend/
-│   ├── main.py                  # FastAPI app entry point
-│   ├── database.py              # SQLAlchemy models and DB setup
-│   ├── auth_utils.py            # JWT, bcrypt, RBAC utilities
+│   ├── main.py              ← FastAPI app, lifespan, CORS
+│   ├── database.py          ← SQLAlchemy models (User, ScanResult, VoiceAnalysis, AuditLog)
+│   ├── auth_utils.py        ← bcrypt, JWT, RBAC dependency factory
 │   ├── requirements.txt
 │   ├── .env.example
-│   ├── routes/
-│   │   ├── auth.py              # Login, register, profile
-│   │   ├── scan.py              # Message scanning endpoints
-│   │   ├── voice.py             # Voice analysis endpoints
-│   │   ├── users.py             # User management
-│   │   └── dashboard.py        # Analytics and KPIs
+│   └── routes/
+│   │   ├── auth.py          ← /api/auth/* (register, login, me, generate-key)
+│   │   ├── scan.py          ← /api/scan/* (message, batch, history, evaluate, api)
+│   │   ├── voice.py         ← /api/voice/* (analyse, history)
+│   │   ├── dashboard.py     ← /api/dashboard/* (stats, threat-feed, trends, audit-log)
+│   │   └── users.py         ← /api/users/* (list, invite, role, activate, me)
 │   └── ai/
-│       ├── scanner.py           # GPT-5.4-nano scam detection
-│       ├── risk_scorer.py       # Contextual risk scoring
-│       └── kernel.py            # Semantic Kernel orchestration
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Landing.jsx      # Public landing page
-│   │   │   ├── Login.jsx
-│   │   │   ├── Signup.jsx
-│   │   │   ├── Dashboard.jsx    # Main fraud dashboard
-│   │   │   ├── ScanMessage.jsx  # Message scanning UI
-│   │   │   ├── VoiceAnalysis.jsx
-│   │   │   └── Users.jsx        # User management UI
-│   │   └── components/
-│   │       ├── Sidebar.jsx
-│   │       ├── ThreatFeed.jsx
-│   │       ├── RiskBadge.jsx
-│   │       └── MetricCard.jsx
-│   └── package.json
-└── docs/
-    ├── ai-core.md               # AI architecture docs
-    ├── auth.md                  # Authentication docs
-    ├── database.md              # Database schema docs
-    ├── voice-detection.md       # Voice analysis docs
-    ├── user-management.md       # User management docs
-    ├── dashboard.md             # Dashboard docs
-    └── landing-page.md         # Frontend docs
+│       ├── scanner.py       ← GPT-5.4-nano few-shot fraud detection engine
+│       ├── risk_scorer.py   ← Contextual risk scoring (sender history, campaign detection)
+│       ├── kernel.py        ← Semantic Kernel multi-step pipeline
+│       └── data/
+│           └── nigerian_scam_dataset.json  ← 120-sample evaluation dataset
+│
+└── frontend/
+    └── src/
+        ├── services/        ← API layer (auth, scan, voice, dashboard, users)
+        ├── store/           ← Zustand auth store (persisted JWT)
+        ├── components/      ← ProtectedRoute, RiskBadge, ScoreBar
+        ├── lib/             ← axios client, error helper, formatters
+        └── features/
+            ├── auth/        ← SignIn, SignUp pages + hooks
+            ├── marketing/   ← Landing page
+            └── dashboard/
+                ├── DashboardLayout.tsx        ← Sidebar, role-aware nav
+                └── pages/
+                    ├── DashboardPage.tsx      ← KPIs + live threat feed
+                    ├── ThreatsPage.tsx        ← Live scanner + scan history
+                    ├── DeepfakePage.tsx       ← Audio upload + voice analysis history
+                    ├── UserManagementPage.tsx ← Admin-only user CRUD + invite modal
+                    ├── ProfilePage.tsx        ← Update name/org, synced to auth store
+                    └── ApiKeysPage.tsx        ← Generate/rotate API key + curl example
 ```
 
 ---
 
-## Team
+## Tech stack
 
-| Name | Role | Module |
-|------|------|--------|
-| Ekeh Ndubuisi | AI & Backend Lead | Scam detection, risk scoring, Semantic Kernel |
-| Olusegun Adelowo | Frontend Lead | Admin dashboard, KPI analytics |
-| Adedapo Adeniran | Auth Engineer | JWT auth, RBAC, API key system |
-| Okikiola Osunronbi | Data Engineer | Database schema, audit trail |
-| Abdul Samad Zen-Abdeen | Voice AI Engineer | Deepfake detection, Whisper transcription |
-| Gbolahan Kolawole | Backend Engineer | User management module |
-| Ifunanya Ugwoke | UX & Product | Landing page, UI polish, demo |
-
----
-
-## Hackathon Context
-
-**Event:** TeKnowledge x Microsoft 2026 Agentic AI Hackathon
-**Theme:** Trust, Safety & Fraud Intelligence in Telecom Networks
-**Stack requirement:** Azure OpenAI + Microsoft Semantic Kernel
-**Submitted:** 30th April 2026
+| Layer | Technology |
+|---|---|
+| AI model | Azure OpenAI GPT-5.4-nano (via Microsoft AI Foundry) |
+| Voice | Azure Whisper (transcription) |
+| AI orchestration | Microsoft Semantic Kernel |
+| Backend | FastAPI + Python 3.12+ |
+| Database | SQLite → Azure SQL (prod) |
+| Auth | JWT + bcrypt + RBAC |
+| Frontend | React 19, TypeScript, Vite |
+| State | Zustand (persisted auth) |
+| Data fetching | TanStack Query v5 |
+| Forms | React Hook Form + Zod |
+| UI | Tailwind CSS v4, shadcn-style components |
+| HTTP | Axios with auto JWT injection |
 
 ---
 
-## Roadmap (Post-Hackathon)
+## Role permissions
 
-- [ ] WhatsApp Business API integration
-- [ ] Mobile app for fraud reporting
-- [ ] White-label solution for enterprise clients
-- [ ] Nigerian scam database — community-contributed threat intelligence
-- [ ] Multi-tenant architecture for SaaS scaling
-- [ ] CBN/NCC regulatory reporting module
-- [ ] Real-time webhook alerts to Slack/email/SMS
-
----
-
-## License
-
-MIT License — built for the TeKnowledge x Microsoft 2026 Agentic AI Hackathon.
+| Permission | Admin | Analyst | Viewer |
+|---|---|---|---|
+| View dashboard | ✓ | ✓ | ✓ |
+| Run scans | ✓ | ✓ | ✗ |
+| View scan history | ✓ | ✓ | ✗ |
+| Voice analysis | ✓ | ✓ | ✗ |
+| View user list | ✓ | ✗ | ✗ |
+| Invite / manage users | ✓ | ✗ | ✗ |
+| View audit log | ✓ | ✗ | ✗ |
+| Generate API keys | ✓ | ✓ | ✓ |
+| Batch scan | ✓ | ✗ | ✗ |
 
 ---
 
-<div align="center">
-  <strong>SentinelAI — Protecting Africa's digital financial infrastructure</strong>
-  <br>
-  Built with ❤️ by Team SentinelAI | TeKnowledge x Microsoft 2026
-</div>
+## Key API endpoints
+
+### Auth
+```
+POST /api/auth/register  { email, password, full_name, organisation }
+POST /api/auth/login     { email, password } → access_token
+GET  /api/auth/me        → current user
+POST /api/auth/generate-key → new API key
+```
+
+### Scan
+```
+POST /api/scan/message  { content, message_type, sender? }  [analyst+]
+POST /api/scan/batch    { messages: [...] }                 [admin]
+GET  /api/scan/history  ?threat_level&message_type&page     [analyst+]
+GET  /api/scan/evaluate                                     [admin]
+POST /api/scan/api      X-API-Key header (external endpoint)
+```
+
+### Voice
+```
+POST /api/voice/analyse   multipart/form-data (file)        [analyst+]
+GET  /api/voice/history                                     [any auth]
+```
+
+### Dashboard
+```
+GET /api/dashboard/stats
+GET /api/dashboard/threat-feed?limit
+GET /api/dashboard/trends?days
+GET /api/dashboard/audit-log                               [admin]
+```
+
+### Users
+```
+GET    /api/users                              [admin]
+POST   /api/users/invite                       [admin]
+PUT    /api/users/{id}/role?new_role=          [admin]
+PUT    /api/users/{id}/deactivate              [admin]
+PUT    /api/users/{id}/activate                [admin]
+GET    /api/users/me
+PUT    /api/users/me
+```
+
+---
+
+## External API integration (for banks / telcos)
+
+```bash
+curl -X POST https://your-backend/api/scan/api \
+  -H "X-API-Key: sk-sentinel-<your-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "URGENT: Verify your BVN at gtb-secure-verify.com",
+    "message_type": "sms",
+    "sender": "+2348030001234"
+  }'
+
+# → { "risk_score": 97, "threat_level": "HIGH", "action": "BLOCK", "flags": [...] }
+```
+
+---
+
+## Team & module ownership
+
+| Member | Module | Issues |
+|---|---|---|
+| Ndubuisi Ekeh | AI core — scam detection, risk scoring, Semantic Kernel | #1 #2 #3 #4 #7 |
+| Olusegun Adelowo | Admin dashboard + KPI analytics UI | #14 #15 |
+| Adedapo Adeniran | Auth system — login, RBAC, JWT | #5 #6 #7 |
+| Okikiola Osunronbi | Database schema, logging, audit trail | #8 #9 |
+| Abdul Samad Zen-Abdeen | Deepfake voice detection module | #10 #11 |
+| Gbolahan Kolawole | User management module | #12 #13 |
+| Ifunanya Ugwoke | Landing page, UI/UX, presentation | #16 #17 |
+
+---
+
+## Deployment (Railway — demo)
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+railway login
+cd backend
+railway init
+railway up
+# Copy the live URL → update VITE_API_URL in frontend/.env
+```
+
+Production backend URL goes in `frontend/.env`:
+```
+VITE_API_URL=https://your-backend.up.railway.app
+```
+
+Then build and deploy frontend:
+```bash
+cd frontend
+npm run build
+# Deploy dist/ to Vercel, Netlify, or Railway static
+```

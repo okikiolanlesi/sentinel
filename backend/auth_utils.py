@@ -9,8 +9,8 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -23,22 +23,26 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-jwt-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # HTTP Bearer token security
 security = HTTPBearer(auto_error=False)
 
 
+# bcrypt has a hard 72-byte limit — silently truncate to be safe with long passwords.
+_BCRYPT_MAX_BYTES = 72
+
+
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt"""
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt directly (avoids passlib<>bcrypt compat issues)."""
+    pw_bytes = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(pw_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
+    """Verify a password against its bcrypt hash."""
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        pw_bytes = plain_password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+        return bcrypt.checkpw(pw_bytes, hashed_password.encode("utf-8"))
     except Exception:
         return False
 

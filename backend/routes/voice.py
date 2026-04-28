@@ -138,7 +138,7 @@ async def analyse_voice(
         try:
             transcription = client.audio.transcriptions.create(
                 model=WHISPER_MODEL,
-                file=io.BytesIO(audio_content),
+                file=(file.filename, io.BytesIO(audio_content), file.content_type),
                 response_format="text"
             )
             transcript = transcription.strip()

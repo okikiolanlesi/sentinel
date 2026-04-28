@@ -13,11 +13,20 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-client = AzureOpenAI(
-    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
-    api_key=os.getenv("AZURE_API_KEY"),
-    api_version=os.getenv("AZURE_API_VERSION", "2025-01-01-preview"),
-)
+_client_instance: Optional[AzureOpenAI] = None
+
+
+def get_client() -> AzureOpenAI:
+    """Lazy-initialised singleton AzureOpenAI client."""
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = AzureOpenAI(
+            azure_endpoint=os.getenv("AZURE_ENDPOINT", "https://placeholder.azure.com"),
+            api_key=os.getenv("AZURE_API_KEY", "placeholder"),
+            api_version=os.getenv("AZURE_API_VERSION", "2025-01-01-preview"),
+        )
+    return _client_instance
+
 
 CHAT_MODEL = os.getenv("AZURE_CHAT_MODEL", "gpt-5.4-nano")
 
@@ -139,13 +148,13 @@ async def analyse_message(
 
 JSON response only."""
 
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model=CHAT_MODEL,
             messages=[
                 {"role": "system", "content": FRAUD_ANALYST_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=400,
+            max_completion_tokens=400,
             temperature=0.1,
             response_format={"type": "json_object"}
         )

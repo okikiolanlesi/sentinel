@@ -14,7 +14,7 @@ from database import get_db, User, ScanResult, MessageType, ThreatLevel, ScanAct
 from auth_utils import get_current_user, require_role, log_audit, get_current_user_from_api_key
 from ai.scanner import analyse_message, batch_analyse
 from ai.risk_scorer import calculate_contextual_risk, get_threat_level
-from ai.kernel import get_fraud_pipeline
+from ai.kernel import run_fraud_analysis_pipeline
 
 router = APIRouter(prefix="/api/scan", tags=["Scanning"])
 
@@ -77,8 +77,7 @@ async def scan_message(
             )
 
         # Run through Semantic Kernel fraud analysis pipeline
-        pipeline = get_fraud_pipeline()
-        result = await pipeline.run_fraud_analysis_pipeline(
+        result = await run_fraud_analysis_pipeline(
             content=request.content,
             sender=request.sender,
             message_type=request.message_type,
@@ -314,6 +313,38 @@ async def get_scan_history(
         )
 
 
+@router.get("/evaluate", summary="Run model evaluation against Nigerian scam dataset")
+async def evaluate_model(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+):
+    """
+    Run SentinelAI against the built-in Nigerian scam evaluation dataset.
+
+    Returns accuracy metrics and per-sample predictions vs expected actions.
+    Admin only.
+    """
+    from ai.scanner import evaluate_model_performance
+    try:
+        results = await evaluate_model_performance()
+        return {
+            "status": "evaluation_complete",
+            "accuracy_percent": results["accuracy"],
+            "correct": results["correct"],
+            "total": results["total"],
+            "results": results["results"],
+        }
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Evaluation dataset not found. Expected at backend/ai/data/nigerian_scam_dataset.json",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Evaluation failed: {str(e)}",
+        )
+
+
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan_result(
     scan_id: str,
@@ -491,22 +522,5 @@ async def scan_via_api_key(
 
 
 # --- Model Evaluation Endpoint ---
-@router.get("/evaluate", summary="Run model evaluation against Nigerian scam dataset")
-async def evaluate_model(current_user=Depends(require_role("admin"))):
-    """
-    Runs SentinelAI against the built-in evaluation dataset.
-    Returns accuracy metrics and per-sample results.
-    Admin only.
-    """
-    from ai.scanner import evaluate_model_performance
-    try:
-        results = await evaluate_model_performance()
-        return {
-            "status": "evaluation_complete",
-            "accuracy_percent": results["accuracy"],
-            "correct": results["correct"],
-            "total": results["total"],
-            "results": results["results"]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
+# (moved above /{scan_id} earlier so route matching works correctly)
+
