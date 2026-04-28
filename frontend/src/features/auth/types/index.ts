@@ -7,6 +7,9 @@ export interface AuthUser {
   lastName: string
   role: UserRole
   organization: string
+  isActive?: boolean
+  createdAt?: string
+  lastLogin?: string
   avatarUrl?: string
 }
 
