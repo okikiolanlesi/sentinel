@@ -91,7 +91,13 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             hashed_password=hashed_pw,
             full_name=request.full_name,
             organisation=request.organisation,
-            role=UserRole.VIEWER,  # Default role
+            role=UserRole.ADMIN if (
+                request.organisation and
+                db.query(User).filter(
+                    User.organisation == request.organisation,
+                    User.is_active == True
+                ).first() is None
+            ) else UserRole.VIEWER,  # First in org = admin, rest = viewer
             is_active=True,
             api_key=api_key
         )
