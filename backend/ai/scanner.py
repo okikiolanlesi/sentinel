@@ -191,7 +191,7 @@ async def _call_gpt(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=500,
+        max_completion_tokens=500,
         temperature=temperature,
         response_format={"type": "json_object"},
     )
