@@ -1,6 +1,14 @@
 """
-SentinelAI — Scam Detection Engine
-Powered by Azure OpenAI GPT-5.4-nano + Few-Shot Nigerian Fraud Intelligence
+SentinelAI — Scam Detection Engine v2 (Hardened)
+=================================================
+Powered by Azure OpenAI GPT-5.4-nano + 5-layer accuracy stack:
+
+  1. RULE PRE-FLIGHT     — deterministic regex catches obvious cases
+  2. DYNAMIC FEW-SHOT    — retrieve 3 most similar examples from labelled corpus
+  3. CHAIN-OF-THOUGHT    — extract signals first, then score (not direct guess)
+  4. SELF-CONSISTENCY    — for borderline cases (40-75), run twice and reconcile
+  5. CALIBRATION         — post-process to enforce floors / ceilings / consistency
+
 TeKnowledge x Microsoft 2026 Agentic AI Hackathon
 """
 
@@ -9,7 +17,11 @@ import json
 import asyncio
 import logging
 from openai import AzureOpenAI
-from typing import Optional
+from typing import Optional, Dict, Any
+
+from ai.rules import apply_rules
+from ai.retriever import retrieve_similar_examples, format_examples_for_prompt
+from ai.calibrator import calibrate
 
 logger = logging.getLogger(__name__)
 
@@ -36,141 +48,229 @@ DEFAULT_MEDIUM_RISK = {
     "flags": ["analysis_unavailable"],
     "action": "REVIEW",
     "reasoning": "Unable to complete AI analysis. Manual review recommended.",
-    "is_scam": False
+    "is_scam": False,
+    "source": "fallback",
+    "calibration_log": [],
+    "self_consistency_applied": False,
 }
 
-FEW_SHOT_EXAMPLES = """
-EXAMPLE 1:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORE FEW-SHOT EXAMPLES (always included as baseline)
+# ─────────────────────────────────────────────────────────────────────────────
+
+CORE_FEW_SHOT = """
+EXAMPLE A (Bank impersonation + fake domain):
 Message: "URGENT: Your GTBank account has been suspended. Verify your BVN at gtb-secure-verify.com within 24 hours or face permanent closure."
-{"risk_score": 97, "threat_level": "HIGH", "flags": ["fake_domain", "urgency_language", "bank_impersonation", "bvn_request", "threat_of_closure"], "action": "BLOCK", "reasoning": "Impersonates GTBank with fake domain. BVN requests via SMS are primary identity theft vectors in Nigeria. Permanent closure threat forces panic-driven action.", "is_scam": true}
+Output: {"risk_score": 97, "threat_level": "HIGH", "flags": ["fake_domain", "urgency_language", "bank_impersonation", "bvn_request", "threat_of_closure"], "action": "BLOCK", "reasoning": "Impersonates GTBank with fake domain. BVN requests via SMS are primary identity theft vectors in Nigeria. Permanent closure threat forces panic-driven action.", "is_scam": true}
 
-EXAMPLE 2:
-Message: "CONGRATULATIONS! You won ₦2,500,000 in the MTN Anniversary Promo. Claim: send your account number to mtn-promo@gmail.com"
-{"risk_score": 98, "threat_level": "HIGH", "flags": ["prize_scam", "gmail_contact", "account_details_request", "telco_impersonation"], "action": "BLOCK", "reasoning": "No legitimate Nigerian telco uses Gmail for prize distributions. Account number request designed to steal banking credentials.", "is_scam": true}
-
-EXAMPLE 3:
+EXAMPLE B (OTP sharing — always 95+):
 Message: "Your OTP is 847291. Share this code with our customer care agent to complete verification."
-{"risk_score": 99, "threat_level": "HIGH", "flags": ["otp_sharing_request", "credential_theft", "social_engineering"], "action": "BLOCK", "reasoning": "Legitimate banks NEVER ask customers to share OTP codes. This is a direct account takeover attempt by definition.", "is_scam": true}
+Output: {"risk_score": 99, "threat_level": "HIGH", "flags": ["otp_sharing_request", "credential_theft", "social_engineering"], "action": "BLOCK", "reasoning": "Legitimate banks NEVER ask customers to share OTP codes. This is a direct account takeover attempt by definition.", "is_scam": true}
 
-EXAMPLE 4:
-Message: "CBN ALERT: All accounts must be re-verified at cbn-verify-ng.com with your BVN and NIN or be frozen."
-{"risk_score": 96, "threat_level": "HIGH", "flags": ["cbn_impersonation", "fake_domain", "bvn_request", "nin_request", "false_authority"], "action": "BLOCK", "reasoning": "CBN never sends individual verification requests via SMS. Collecting BVN and NIN together enables complete identity theft.", "is_scam": true}
-
-EXAMPLE 5:
-Message: "Your GTBank account XXXXXX1234 has been credited with ₦150,000.00. Balance: ₦387,450.22. Date: 24-Apr-2026. Not you? Call 07300000000."
-{"risk_score": 3, "threat_level": "CLEAN", "flags": [], "action": "ALLOW", "reasoning": "Standard GTBank credit alert with masked account number, official helpline, no links or credential requests.", "is_scam": false}
-
-EXAMPLE 6:
-Message: "Earn ₦150,000 daily from home, 2 hours work, no experience needed. WhatsApp us now. Limited slots."
-{"risk_score": 85, "threat_level": "HIGH", "flags": ["unrealistic_income_promise", "job_scam", "whatsapp_redirect"], "action": "BLOCK", "reasoning": "No legitimate employer offers ₦150,000/day for 2 hours with no experience. Consistent with money mule recruitment.", "is_scam": true}
-
-EXAMPLE 7:
+EXAMPLE C (Deepfake CEO / BEC):
 Message: "This is the MD calling. Transfer ₦15,000,000 to GTBank 0123456789, Acme Supplies. Tell no one, I will explain later."
-{"risk_score": 98, "threat_level": "HIGH", "flags": ["executive_impersonation", "large_transfer_request", "secrecy_instruction", "deepfake_likely", "bec_pattern"], "action": "BLOCK", "reasoning": "Classic deepfake CEO fraud. Large transfer combined with secrecy instruction is the highest-risk combination in Nigerian corporate fraud.", "is_scam": true}
+Output: {"risk_score": 98, "threat_level": "HIGH", "flags": ["executive_impersonation", "large_transfer_request", "secrecy_instruction", "deepfake_likely", "bec_pattern"], "action": "BLOCK", "reasoning": "Classic deepfake CEO fraud. Large transfer combined with secrecy instruction is the highest-risk combination in Nigerian corporate fraud.", "is_scam": true}
 
-EXAMPLE 8:
-Message: "Your Access Bank loan repayment of ₦45,000 is due 30th April. Pay via mobile app or any branch. Helpline: 01-2712005"
-{"risk_score": 4, "threat_level": "CLEAN", "flags": [], "action": "ALLOW", "reasoning": "Legitimate loan repayment reminder. Official helpline provided, no links, directs to official payment channels.", "is_scam": false}
+EXAMPLE D (Legitimate bank alert):
+Message: "Your GTBank account XXXXXX1234 has been credited with N150,000.00. Balance: N387,450.22. Date: 24-Apr-2026. Not you? Call 07300000000."
+Output: {"risk_score": 3, "threat_level": "CLEAN", "flags": [], "action": "ALLOW", "reasoning": "Standard GTBank credit alert with masked account number, official helpline, no links or credential requests.", "is_scam": false}
 
-EXAMPLE 9:
-Message: "Pre-approved loan of ₦500,000 available. Pay ₦3,000 insurance fee to account 0987654321 Wema Bank to activate."
-{"risk_score": 78, "threat_level": "MEDIUM", "flags": ["upfront_fee_request", "advance_fee", "unsolicited_loan"], "action": "REVIEW", "reasoning": "Advance fee loan fraud. Legitimate lenders never require upfront fees. Medium risk due to less aggressive language.", "is_scam": true}
+EXAMPLE E (Government impersonation extortion):
+Message: "EFCC: Your account is linked to money laundering. Pay N200,000 bond immediately to avoid arrest today."
+Output: {"risk_score": 97, "threat_level": "HIGH", "flags": ["law_enforcement_impersonation", "arrest_threat", "extortion", "payment_demand"], "action": "BLOCK", "reasoning": "EFCC never calls to demand bond payments via SMS. Pure extortion using false authority and arrest threats.", "is_scam": true}
 
-EXAMPLE 10:
-Message: "EFCC: Your account is linked to money laundering. Pay ₦200,000 bond immediately to avoid arrest today."
-{"risk_score": 97, "threat_level": "HIGH", "flags": ["law_enforcement_impersonation", "arrest_threat", "extortion", "payment_demand"], "action": "BLOCK", "reasoning": "EFCC never calls to demand bond payments via SMS. Pure extortion using false authority and arrest threats.", "is_scam": true}
+EXAMPLE F (Advance-fee loan — medium risk):
+Message: "Pre-approved loan of N500,000 available. Pay N3,000 insurance fee to account 0987654321 Wema Bank to activate."
+Output: {"risk_score": 78, "threat_level": "MEDIUM", "flags": ["upfront_fee_request", "advance_fee", "unsolicited_loan"], "action": "REVIEW", "reasoning": "Advance fee loan fraud. Legitimate lenders never require upfront fees. Medium risk due to less aggressive language.", "is_scam": true}
 """
 
-FRAUD_ANALYST_SYSTEM_PROMPT = f"""You are SentinelAI, an expert AI fraud analyst specialising in Nigerian and African telecom fraud. You have deep knowledge of all scam patterns targeting Nigerian consumers and businesses.
 
-YOUR EXPERTISE:
+# ─────────────────────────────────────────────────────────────────────────────
+# SYSTEM PROMPT BUILDER — assembled per-request with retrieved examples
+# ─────────────────────────────────────────────────────────────────────────────
 
-ALWAYS BLOCK (risk 90-100):
-- OTP sharing requests — banks NEVER ask for OTP sharing, ever
-- Card number + CVV requests — no bank ever asks for this
-- Executive impersonation + transfer + secrecy = deepfake CEO fraud
-- Government impersonation (CBN, EFCC, NIMC, Police) demanding payment or credentials
-- Fake bank domains collecting BVN/NIN/passwords
+def _build_system_prompt(retrieved_examples_block: str) -> str:
+    """Assemble the full system prompt with dynamic few-shot block."""
+    return f"""You are SentinelAI, an expert AI fraud analyst specialising in Nigerian and African telecom fraud. You analyse SMS, WhatsApp, and voice transcripts for banks, fintechs, telcos, and call centres.
 
-USUALLY BLOCK (risk 70-89):
-- Prize scams from MTN/Airtel/Glo using Gmail contacts
-- Job scams promising ₦50,000-₦500,000/day
+# YOUR REASONING PROCESS (chain-of-thought)
+For every message, internally walk through these steps before scoring:
+  1. Identify the message TYPE (bank alert, promotional, request, transactional)
+  2. List every specific FRAUD SIGNAL you can detect (be exhaustive)
+  3. List every LEGITIMACY SIGNAL you can detect
+  4. Apply the SCORING RUBRIC below based on signals counted
+  5. Cross-check: do the score, threat_level, and action all agree?
+
+# SCORING RUBRIC (apply strictly)
+
+## ALWAYS BLOCK (risk 90-100) - these are categorical:
+- OTP / PIN sharing requests -> 95+ minimum
+- Card number + CVV requests -> 95+ minimum
+- Executive impersonation + transfer + secrecy = deepfake CEO fraud -> 95+
+- Government impersonation (CBN, EFCC, NDLEA, NIMC, Police) demanding payment or credentials -> 95+
+- Fake bank domains harvesting BVN/NIN/passwords -> 90+
+
+## USUALLY BLOCK (risk 70-89):
+- Prize scams from MTN/Airtel/Glo/9mobile using Gmail/Yahoo contacts
+- Job scams promising N50,000-N500,000/day for minimal work
 - Investment scams promising guaranteed 100-300% returns
 - Loan scams requiring upfront fees before disbursement
 
-REVIEW (risk 50-69):
-- Unsolicited loan offers without upfront fee requests
-- Suspicious domains but without direct credential requests
+## REVIEW (risk 50-69):
+- Unsolicited loan offers without explicit upfront fee requests
+- Suspicious domains without direct credential requests
 - Unverifiable transaction alerts with suspicious call-back numbers
 
-ALLOW (risk 0-49):
+## ALLOW (risk 0-49):
 - Standard bank transaction alerts (masked account numbers, official helplines)
 - Airtime/data bundle confirmations
-- Loan repayment reminders with official channels
-- USSD code instructions
+- Loan repayment reminders citing official channels (apps, branches, USSD)
+- USSD code instructions (*737#, *901#, *131# etc.)
 
-KEY NIGERIAN FRAUD SIGNALS:
-- Fake domains: gtb-verify.com, cbn-alert.net, access-bank-secure.com (not .com.ng or official domains)
-- Gmail/Yahoo contacts for banks = always scam
-- BVN + NIN + DOB together = identity theft setup
-- OTP sharing request = account takeover
-- Processing fee for loan/prize = advance fee fraud
-- "Tell no one" + transfer request = deepfake/BEC fraud
-- Arrest threat + payment demand = EFCC/Police impersonation extortion
+# NIGERIAN FRAUD SIGNAL CHEATSHEET
 
-LEGITIMATE SIGNALS:
-- Masked account numbers (XXXXXX1234)
-- Official bank helplines (0730-000-0000, 0700-xxx-xxxx format)
+CONFIRMED FRAUD SIGNALS:
+- Fake domains (gtb-verify.com, cbn-alert.net, anything-bank-secure.xyz). Real Nigerian banks use .com.ng, .ng, or their official .com.
+- Gmail / Yahoo contact for banks/telcos = always scam.
+- BVN + NIN + DOB requested together = identity theft kit.
+- Any OTP sharing instruction = account takeover.
+- Upfront fee for loan/prize/grant = advance fee fraud (419).
+- "Tell no one" / "keep this confidential" + transfer instruction = BEC / deepfake.
+- Arrest threat + payment demand = EFCC/Police impersonation extortion.
+- Shortened URLs (bit.ly, tinyurl) for "bank verification" = phishing.
+
+LEGITIMACY SIGNALS:
+- Masked account numbers (XXXXXX1234, ****4821)
+- Official bank helplines in 0700-/0730-/01- format
 - USSD codes (*737#, *901#, *131#)
 - Transaction reference numbers
-- Directing to official app/branch (not links)
+- Directing to official mobile app / branch (not embedded links)
+- Specific date and merchant name in transaction alerts
 
-FEW-SHOT TRAINING EXAMPLES:
-{FEW_SHOT_EXAMPLES}
+# REFERENCE EXAMPLES
+{CORE_FEW_SHOT}
+{retrieved_examples_block}
 
-RESPOND WITH ONLY VALID JSON — no text outside the JSON:
-{{"risk_score": <0-100>, "threat_level": "<HIGH|MEDIUM|LOW|CLEAN>", "flags": [<array of flag strings>], "action": "<BLOCK|REVIEW|ALLOW>", "reasoning": "<1-3 sentence plain English explanation>", "is_scam": <true|false>}}"""
+# OUTPUT FORMAT (strict JSON, nothing else)
+{{"risk_score": <int 0-100>, "threat_level": "<HIGH|MEDIUM|LOW|CLEAN>", "flags": [<strings>], "action": "<BLOCK|REVIEW|ALLOW>", "reasoning": "<2-3 sentence plain-English explanation>", "is_scam": <true|false>}}
 
+THRESHOLDS (must be consistent):
+- risk_score 80-100 -> threat_level HIGH -> action BLOCK
+- risk_score 50-79  -> threat_level MEDIUM -> action REVIEW
+- risk_score 20-49  -> threat_level LOW -> action ALLOW
+- risk_score 0-19   -> threat_level CLEAN -> action ALLOW
+- is_scam = true if risk_score >= 50, otherwise false
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GPT CALL WRAPPER
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _call_gpt(
+    content: str,
+    message_type: str,
+    sender: Optional[str],
+    system_prompt: str,
+    temperature: float = 0.1,
+) -> Dict[str, Any]:
+    """Single GPT call returning parsed JSON dict."""
+    sender_context = f"Sender: {sender}\n" if sender else ""
+    user_prompt = (
+        f"Analyse this {message_type.upper()} for fraud:\n\n"
+        f'{sender_context}Message: "{content}"\n\n'
+        f"Walk through your reasoning, then output the JSON verdict only."
+    )
+
+    response = get_client().chat.completions.create(
+        model=CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_completion_tokens=500,
+        temperature=temperature,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content
+    return json.loads(raw)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN ENTRY POINT
+# ─────────────────────────────────────────────────────────────────────────────
 
 async def analyse_message(
     content: str,
     message_type: str = "sms",
-    sender: Optional[str] = None
+    sender: Optional[str] = None,
 ) -> dict:
     """
-    Analyse a message for fraud using GPT-5.4-nano with Nigerian fraud intelligence.
+    Hardened fraud analysis: rule pre-flight -> retrieval -> CoT GPT call ->
+    self-consistency on borderline -> calibration.
     """
     try:
-        sender_context = f"Sender: {sender}\n" if sender else ""
-        user_prompt = f"""Analyse this {message_type.upper()} for fraud:
+        # Layer 1: Rule pre-flight
+        rule_result = apply_rules(content)
 
-{sender_context}Message: "{content}"
+        if rule_result and rule_result.get("skip_gpt"):
+            logger.info(f"Rule engine hard verdict: {rule_result.get('flags')}")
+            return _shape_result({
+                "risk_score": rule_result["risk_score"],
+                "threat_level": rule_result["threat_level"],
+                "flags": rule_result["flags"],
+                "action": rule_result["action"],
+                "reasoning": rule_result["reasoning"],
+                "is_scam": rule_result["is_scam"],
+                "source": "rule_engine",
+            })
 
-JSON response only."""
+        rule_priors = rule_result.get("priors") if rule_result else None
 
-        response = get_client().chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": FRAUD_ANALYST_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_completion_tokens=400,
-            temperature=0.1,
-            response_format={"type": "json_object"}
-        )
+        # Layer 2: Dynamic few-shot retrieval
+        similar = retrieve_similar_examples(content, k=3)
+        retrieved_block = format_examples_for_prompt(similar)
+        system_prompt = _build_system_prompt(retrieved_block)
 
-        raw = response.choices[0].message.content
-        logger.debug(f"Raw AI response: {raw}")
-        result = json.loads(raw)
+        # Layer 3: First GPT call with chain-of-thought
+        first = await _call_gpt(content, message_type, sender, system_prompt, temperature=0.1)
+        score = float(first.get("risk_score", 50))
 
-        return {
-            "risk_score": max(0, min(100, float(result.get("risk_score", 50)))),
-            "threat_level": result.get("threat_level", "MEDIUM"),
-            "flags": result.get("flags", []),
-            "action": result.get("action", "REVIEW"),
-            "reasoning": result.get("reasoning", "Analysis completed."),
-            "is_scam": bool(result.get("is_scam", False))
-        }
+        final = first
+
+        # Layer 4: Self-consistency on borderline cases (40-75)
+        if 40 <= score <= 75:
+            try:
+                second = await _call_gpt(
+                    content, message_type, sender, system_prompt, temperature=0.3
+                )
+                avg = (score + float(second.get("risk_score", score))) / 2
+                merged_flags = list(set(
+                    list(first.get("flags", [])) + list(second.get("flags", []))
+                ))
+                reasoning = max(
+                    [first.get("reasoning", ""), second.get("reasoning", "")],
+                    key=len,
+                )
+                final = {
+                    "risk_score": avg,
+                    "threat_level": first.get("threat_level"),
+                    "flags": merged_flags,
+                    "action": first.get("action"),
+                    "reasoning": reasoning,
+                    "is_scam": first.get("is_scam"),
+                    "self_consistency_applied": True,
+                    "scores_observed": [score, float(second.get("risk_score", score))],
+                }
+                logger.info(f"Self-consistency applied: {final['scores_observed']}")
+            except Exception as e:
+                logger.warning(f"Self-consistency second call failed: {e}")
+
+        # Layer 5: Calibration
+        calibrated = calibrate(final, content, rule_priors=rule_priors)
+
+        return _shape_result({**calibrated, "source": "gpt+calibration"})
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON parse error: {e}")
@@ -180,15 +280,28 @@ JSON response only."""
         return DEFAULT_MEDIUM_RISK
 
 
+def _shape_result(r: Dict[str, Any]) -> dict:
+    """Coerce all fields to expected types and bounds."""
+    return {
+        "risk_score": max(0.0, min(100.0, float(r.get("risk_score", 50)))),
+        "threat_level": r.get("threat_level", "MEDIUM"),
+        "flags": list(r.get("flags", [])),
+        "action": r.get("action", "REVIEW"),
+        "reasoning": r.get("reasoning", "Analysis completed."),
+        "is_scam": bool(r.get("is_scam", False)),
+        "source": r.get("source", "gpt"),
+        "calibration_log": r.get("calibration_log", []),
+        "self_consistency_applied": r.get("self_consistency_applied", False),
+    }
+
+
 async def batch_analyse(messages: list) -> list:
-    """
-    Analyse multiple messages concurrently.
-    """
+    """Analyse multiple messages concurrently."""
     tasks = [
         analyse_message(
             content=msg.get("content", ""),
             message_type=msg.get("message_type", "sms"),
-            sender=msg.get("sender")
+            sender=msg.get("sender"),
         )
         for msg in messages
     ]
@@ -199,43 +312,78 @@ async def batch_analyse(messages: list) -> list:
     ]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EVALUATION (for dashboard accuracy widget)
+# ─────────────────────────────────────────────────────────────────────────────
+
 async def evaluate_model_performance() -> dict:
-    """
-    Run evaluation set to measure model accuracy against known samples.
-    """
+    """Run the labelled dataset and report accuracy / precision / recall."""
     dataset_path = os.path.join(
         os.path.dirname(__file__), "data", "nigerian_scam_dataset.json"
     )
-
-    with open(dataset_path, "r") as f:
+    with open(dataset_path, "r", encoding="utf-8") as f:
         dataset = json.load(f)
 
-    evaluation_set = dataset.get("evaluation_set", [])
+    samples = dataset.get("samples", [])
+    if not samples:
+        return {"error": "No samples available"}
+
     correct = 0
-    total = len(evaluation_set)
+    tp = fp = tn = fn = 0
+    score_diffs = []
     results = []
 
-    for item in evaluation_set:
-        result = await analyse_message(content=item["content"], message_type="sms")
-        expected = item["expected_action"]
-        predicted = result["action"]
-        is_correct = expected == predicted
+    for item in samples:
+        result = await analyse_message(
+            content=item["content"],
+            message_type=item.get("message_type", "sms"),
+        )
+        expected_action = item.get("action")
+        predicted_action = result["action"]
+        is_correct = expected_action == predicted_action
         if is_correct:
             correct += 1
+
+        expected_pos = expected_action == "BLOCK"
+        predicted_pos = predicted_action == "BLOCK"
+        if expected_pos and predicted_pos:
+            tp += 1
+        elif (not expected_pos) and (not predicted_pos):
+            tn += 1
+        elif (not expected_pos) and predicted_pos:
+            fp += 1
+        else:
+            fn += 1
+
+        score_diffs.append(abs(item.get("risk_score", 50) - result["risk_score"]))
+
         results.append({
             "id": item["id"],
-            "preview": item["content"][:60] + "...",
-            "expected": expected,
-            "predicted": predicted,
-            "risk_score": result["risk_score"],
-            "correct": is_correct
+            "category": item.get("category", "unknown"),
+            "preview": item["content"][:80] + ("..." if len(item["content"]) > 80 else ""),
+            "expected_action": expected_action,
+            "predicted_action": predicted_action,
+            "expected_score": item.get("risk_score"),
+            "predicted_score": result["risk_score"],
+            "correct": is_correct,
+            "source": result.get("source", "gpt"),
         })
 
+    total = len(samples)
+    precision = tp / (tp + fp) if (tp + fp) else 0
+    recall = tp / (tp + fn) if (tp + fn) else 0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0
+
     return {
-        "accuracy": round((correct / total * 100) if total > 0 else 0, 2),
+        "accuracy": round(correct / total * 100, 2),
+        "precision": round(precision * 100, 2),
+        "recall": round(recall * 100, 2),
+        "f1": round(f1 * 100, 2),
+        "mean_score_error": round(sum(score_diffs) / len(score_diffs), 2),
         "correct": correct,
         "total": total,
-        "results": results
+        "confusion": {"tp": tp, "fp": fp, "tn": tn, "fn": fn},
+        "results": results,
     }
 
 

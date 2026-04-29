@@ -36,3 +36,7 @@ All backend AI logic powering SentinelAI's threat detection engine was designed 
 - Admin-level endpoint for scanning multiple messages in one request
 - Built for high-volume telco and fintech use cases
 - Processes each message through the full detection pipeline and returns aggregated results
+
+### DeployMent ###
+
+- Also Handled the deployment of both frontend and backend
