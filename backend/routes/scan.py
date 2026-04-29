@@ -1,6 +1,9 @@
 """
 SentinelAI Scan Routes
 Message scanning, batch processing, and scan history
+
+v2 fix: ScanResponse now includes content, sender, message_type, source,
+        calibration_log so history shows the full message + AI reasoning.
 """
 
 import json
@@ -19,26 +22,36 @@ from ai.kernel import run_fraud_analysis_pipeline
 router = APIRouter(prefix="/api/scan", tags=["Scanning"])
 
 
-# Pydantic models
+# ─────────────────────────────────────────────────────────────────────────────
+# PYDANTIC MODELS
+# ─────────────────────────────────────────────────────────────────────────────
+
 class ScanRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=10000, description="Message content to analyse")
-    message_type: str = Field(default="sms", description="Type: sms, whatsapp, or transcript")
-    sender: Optional[str] = Field(None, max_length=255, description="Sender identifier (phone/email)")
+    content: str = Field(..., min_length=1, max_length=10000)
+    message_type: str = Field(default="sms", description="sms | whatsapp | transcript")
+    sender: Optional[str] = Field(None, max_length=255)
 
 
 class ScanResponse(BaseModel):
     id: str
+    # ── Original message fields (NEW — so history shows the full message) ──
+    content: str
+    sender: Optional[str]
+    message_type: str
+    # ── AI verdict fields ──
     risk_score: float
     threat_level: str
     flags: list
     action: str
-    reasoning: str
+    reasoning: str          # AI's plain-English explanation
     is_scam: bool
+    source: str             # "rule_engine" | "gpt+calibration" | "fallback"
+    calibration_log: list   # Any overrides the calibrator applied
     created_at: datetime
 
 
 class BatchScanRequest(BaseModel):
-    messages: List[ScanRequest] = Field(..., max_items=50, description="Max 50 messages per batch")
+    messages: List[ScanRequest] = Field(..., max_items=50)
 
 
 class BatchScanResponse(BaseModel):
@@ -56,27 +69,45 @@ class ScanHistoryResponse(BaseModel):
     pages: int
 
 
+def _build_scan_response(scan: ScanResult, is_scam: bool = None, source: str = "gpt+calibration", calibration_log: list = None) -> ScanResponse:
+    """Build a ScanResponse from a ScanResult DB row, including message content."""
+    if is_scam is None:
+        is_scam = scan.threat_level in [ThreatLevel.HIGH, ThreatLevel.MEDIUM]
+    return ScanResponse(
+        id=scan.id,
+        content=scan.content or "",
+        sender=scan.sender,
+        message_type=scan.message_type.value if scan.message_type else "sms",
+        risk_score=scan.risk_score,
+        threat_level=scan.threat_level.value,
+        flags=scan.flags or [],
+        action=scan.action.value,
+        reasoning=scan.ai_reasoning or "",
+        is_scam=is_scam,
+        source=source,
+        calibration_log=calibration_log or [],
+        created_at=scan.created_at,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCAN A SINGLE MESSAGE
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.post("/message", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
 async def scan_message(
     request: ScanRequest,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: Session = Depends(get_db)
 ):
-    """
-    Scan a single message for fraud indicators.
-
-    Requires: analyst or admin role
-    Uses Semantic Kernel fraud analysis pipeline
-    """
+    """Scan a single message through the full 5-layer fraud analysis pipeline."""
     try:
-        # Validate message type
         if request.message_type not in ["sms", "whatsapp", "transcript"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid message_type. Must be: sms, whatsapp, or transcript"
             )
 
-        # Run through Semantic Kernel fraud analysis pipeline
         result = await run_fraud_analysis_pipeline(
             content=request.content,
             sender=request.sender,
@@ -84,7 +115,8 @@ async def scan_message(
             db=db
         )
 
-        # Save result to database
+        ai = result["ai_analysis"]
+
         scan_result = ScanResult(
             user_id=current_user.id,
             message_type=MessageType(request.message_type),
@@ -92,45 +124,48 @@ async def scan_message(
             sender=request.sender,
             risk_score=result["final_risk_score"],
             threat_level=ThreatLevel(result["final_threat_level"]),
-            flags=result["ai_analysis"].get("flags", []),
-            action=ScanAction(result["ai_analysis"].get("action", "REVIEW")),
-            ai_reasoning=result["ai_analysis"].get("reasoning", ""),
-            confirmed=False
+            flags=ai.get("flags", []),
+            action=ScanAction(ai.get("action", "REVIEW")),
+            ai_reasoning=ai.get("reasoning", ""),
+            confirmed=False,
         )
 
         db.add(scan_result)
         db.commit()
         db.refresh(scan_result)
 
-        # Log to audit
         log_audit(
-            db=db,
-            user_id=current_user.id,
-            action="MESSAGE_SCANNED",
+            db=db, user_id=current_user.id, action="MESSAGE_SCANNED",
             resource="scan_results",
             details=f"Scanned {request.message_type} from {request.sender or 'unknown'}",
         )
 
         return ScanResponse(
             id=scan_result.id,
+            content=request.content,
+            sender=request.sender,
+            message_type=request.message_type,
             risk_score=scan_result.risk_score,
             threat_level=scan_result.threat_level.value,
             flags=scan_result.flags or [],
             action=scan_result.action.value,
             reasoning=scan_result.ai_reasoning or "",
-            is_scam=result["ai_analysis"].get("is_scam", False),
-            created_at=scan_result.created_at
+            is_scam=ai.get("is_scam", False),
+            source=ai.get("source", "gpt+calibration"),
+            calibration_log=ai.get("calibration_log", []),
+            created_at=scan_result.created_at,
         )
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Scan failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BATCH SCAN
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/batch", response_model=BatchScanResponse)
 async def scan_batch(
@@ -138,41 +173,25 @@ async def scan_batch(
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    """
-    Scan multiple messages concurrently.
-
-    Requires: admin role
-    Max 50 messages per batch
-    """
+    """Scan up to 50 messages concurrently."""
     try:
-        # Prepare messages for batch analysis
         messages = [
-            {
-                "content": msg.content,
-                "message_type": msg.message_type,
-                "sender": msg.sender
-            }
-            for msg in request.messages
+            {"content": m.content, "message_type": m.message_type, "sender": m.sender}
+            for m in request.messages
         ]
-
-        # Run batch analysis
         results = await batch_analyse(messages)
 
-        # Save all results and build response
-        saved_results = []
+        saved = []
         breakdown = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "CLEAN": 0}
         threats_found = 0
 
         for i, ai_result in enumerate(results):
             msg = request.messages[i]
-
-            # Apply contextual risk scoring
             risk_context = calculate_contextual_risk(
                 base_score=ai_result["risk_score"],
                 sender=msg.sender or "",
-                db=db
+                db=db,
             )
-
             threat_level = get_threat_level(risk_context["final_score"])
 
             scan_result = ScanResult(
@@ -185,26 +204,20 @@ async def scan_batch(
                 flags=ai_result.get("flags", []),
                 action=ScanAction(ai_result.get("action", "REVIEW")),
                 ai_reasoning=ai_result.get("reasoning", ""),
-                confirmed=False
+                confirmed=False,
             )
-
             db.add(scan_result)
-            saved_results.append(scan_result)
-
-            # Update breakdown
+            saved.append((scan_result, ai_result))
             breakdown[threat_level] += 1
             if threat_level in ["HIGH", "MEDIUM"]:
                 threats_found += 1
 
         db.commit()
 
-        # Log batch scan
         log_audit(
-            db=db,
-            user_id=current_user.id,
-            action="BATCH_SCAN",
+            db=db, user_id=current_user.id, action="BATCH_SCAN",
             resource="scan_results",
-            details=f"Batch scanned {len(request.messages)} messages, found {threats_found} threats"
+            details=f"Batch: {len(request.messages)} messages, {threats_found} threats",
         )
 
         return BatchScanResponse(
@@ -214,75 +227,72 @@ async def scan_batch(
             results=[
                 ScanResponse(
                     id=r.id,
+                    content=r.content or "",
+                    sender=r.sender,
+                    message_type=r.message_type.value,
                     risk_score=r.risk_score,
                     threat_level=r.threat_level.value,
                     flags=r.flags or [],
                     action=r.action.value,
                     reasoning=r.ai_reasoning or "",
                     is_scam=r.threat_level in [ThreatLevel.HIGH, ThreatLevel.MEDIUM],
-                    created_at=r.created_at
+                    source=ai.get("source", "gpt+calibration"),
+                    calibration_log=ai.get("calibration_log", []),
+                    created_at=r.created_at,
                 )
-                for r in saved_results
-            ]
+                for r, ai in saved
+            ],
         )
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Batch scan failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Batch scan failed: {str(e)}")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCAN HISTORY — now returns full message + AI reasoning
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/history", response_model=ScanHistoryResponse)
 async def get_scan_history(
-    threat_level: Optional[str] = Query(None, description="Filter by threat level"),
-    message_type: Optional[str] = Query(None, description="Filter by message type"),
-    start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[str] = Query(None, description="End date (ISO format)"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    threat_level: Optional[str] = Query(None),
+    message_type: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: Session = Depends(get_db)
 ):
     """
-    Get paginated scan history for current user's organisation.
-
-    Supports filtering by threat_level, message_type, and date range.
+    Get paginated scan history.
+    Each item includes: original message content, sender, AI reasoning,
+    risk score, flags, action, and any calibration overrides.
     """
     try:
-        # Build query
         query = db.query(ScanResult).filter(ScanResult.user_id == current_user.id)
 
-        # Apply filters
-        if threat_level:
-            if threat_level.upper() in ["HIGH", "MEDIUM", "LOW", "CLEAN"]:
-                query = query.filter(ScanResult.threat_level == ThreatLevel(threat_level.upper()))
+        if threat_level and threat_level.upper() in ["HIGH", "MEDIUM", "LOW", "CLEAN"]:
+            query = query.filter(ScanResult.threat_level == ThreatLevel(threat_level.upper()))
 
-        if message_type:
-            if message_type.lower() in ["sms", "whatsapp", "transcript"]:
-                query = query.filter(ScanResult.message_type == MessageType(message_type.lower()))
+        if message_type and message_type.lower() in ["sms", "whatsapp", "transcript"]:
+            query = query.filter(ScanResult.message_type == MessageType(message_type.lower()))
 
         if start_date:
             try:
-                start = datetime.fromisoformat(start_date)
-                query = query.filter(ScanResult.created_at >= start)
+                query = query.filter(ScanResult.created_at >= datetime.fromisoformat(start_date))
             except ValueError:
                 pass
 
         if end_date:
             try:
-                end = datetime.fromisoformat(end_date)
-                query = query.filter(ScanResult.created_at <= end)
+                query = query.filter(ScanResult.created_at <= datetime.fromisoformat(end_date))
             except ValueError:
                 pass
 
-        # Get total count
         total = query.count()
-
-        # Apply pagination
         offset = (page - 1) * page_size
         items = query.order_by(ScanResult.created_at.desc()).offset(offset).limit(page_size).all()
 
@@ -290,59 +300,55 @@ async def get_scan_history(
             items=[
                 ScanResponse(
                     id=item.id,
+                    content=item.content or "",
+                    sender=item.sender,
+                    message_type=item.message_type.value if item.message_type else "sms",
                     risk_score=item.risk_score,
                     threat_level=item.threat_level.value,
                     flags=item.flags or [],
                     action=item.action.value,
                     reasoning=item.ai_reasoning or "",
                     is_scam=item.threat_level in [ThreatLevel.HIGH, ThreatLevel.MEDIUM],
-                    created_at=item.created_at
+                    source="gpt+calibration",
+                    calibration_log=[],
+                    created_at=item.created_at,
                 )
                 for item in items
             ],
             total=total,
             page=page,
             page_size=page_size,
-            pages=(total + page_size - 1) // page_size
+            pages=(total + page_size - 1) // page_size,
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve scan history: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve history: {str(e)}")
 
 
-@router.get("/evaluate", summary="Run model evaluation against Nigerian scam dataset")
+# ─────────────────────────────────────────────────────────────────────────────
+# GET SINGLE SCAN
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/evaluate", summary="Run model evaluation")
 async def evaluate_model(
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """
-    Run SentinelAI against the built-in Nigerian scam evaluation dataset.
-
-    Returns accuracy metrics and per-sample predictions vs expected actions.
-    Admin only.
-    """
     from ai.scanner import evaluate_model_performance
     try:
         results = await evaluate_model_performance()
         return {
             "status": "evaluation_complete",
             "accuracy_percent": results["accuracy"],
+            "precision_percent": results.get("precision"),
+            "recall_percent": results.get("recall"),
+            "f1_percent": results.get("f1"),
             "correct": results["correct"],
             "total": results["total"],
+            "confusion": results.get("confusion"),
             "results": results["results"],
         }
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Evaluation dataset not found. Expected at backend/ai/data/nigerian_scam_dataset.json",
-        )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Evaluation failed: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
 
 
 @router.get("/{scan_id}", response_model=ScanResponse)
@@ -351,9 +357,7 @@ async def get_scan_result(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: Session = Depends(get_db)
 ):
-    """
-    Get a single scan result by ID.
-    """
+    """Get a single scan result by ID — includes full message and AI reasoning."""
     try:
         scan = db.query(ScanResult).filter(
             ScanResult.id == scan_id,
@@ -361,29 +365,28 @@ async def get_scan_result(
         ).first()
 
         if not scan:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Scan result not found"
-            )
+            raise HTTPException(status_code=404, detail="Scan result not found")
 
         return ScanResponse(
             id=scan.id,
+            content=scan.content or "",
+            sender=scan.sender,
+            message_type=scan.message_type.value if scan.message_type else "sms",
             risk_score=scan.risk_score,
             threat_level=scan.threat_level.value,
             flags=scan.flags or [],
             action=scan.action.value,
             reasoning=scan.ai_reasoning or "",
             is_scam=scan.threat_level in [ThreatLevel.HIGH, ThreatLevel.MEDIUM],
-            created_at=scan.created_at
+            source="gpt+calibration",
+            calibration_log=[],
+            created_at=scan.created_at,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve scan: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve scan: {str(e)}")
 
 
 @router.post("/{scan_id}/confirm", response_model=ScanResponse)
@@ -392,9 +395,7 @@ async def confirm_scan(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: Session = Depends(get_db)
 ):
-    """
-    Mark a scan result as a confirmed threat.
-    """
+    """Mark a scan result as a confirmed threat."""
     try:
         scan = db.query(ScanResult).filter(
             ScanResult.id == scan_id,
@@ -402,42 +403,36 @@ async def confirm_scan(
         ).first()
 
         if not scan:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Scan result not found"
-            )
+            raise HTTPException(status_code=404, detail="Scan result not found")
 
         scan.confirmed = True
         db.commit()
         db.refresh(scan)
 
-        log_audit(
-            db=db,
-            user_id=current_user.id,
-            action="SCAN_CONFIRMED",
-            resource="scan_results",
-            details=f"Confirmed threat: {scan_id}"
-        )
+        log_audit(db=db, user_id=current_user.id, action="SCAN_CONFIRMED",
+                  resource="scan_results", details=f"Confirmed: {scan_id}")
 
         return ScanResponse(
             id=scan.id,
+            content=scan.content or "",
+            sender=scan.sender,
+            message_type=scan.message_type.value if scan.message_type else "sms",
             risk_score=scan.risk_score,
             threat_level=scan.threat_level.value,
             flags=scan.flags or [],
             action=scan.action.value,
             reasoning=scan.ai_reasoning or "",
             is_scam=scan.threat_level in [ThreatLevel.HIGH, ThreatLevel.MEDIUM],
-            created_at=scan.created_at
+            source="gpt+calibration",
+            calibration_log=[],
+            created_at=scan.created_at,
         )
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to confirm scan: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to confirm scan: {str(e)}")
 
 
 @router.post("/api", response_model=dict)
@@ -446,38 +441,24 @@ async def scan_via_api_key(
     current_user: User = Depends(get_current_user_from_api_key),
     db: Session = Depends(get_db)
 ):
-    """
-    External integration endpoint for API key authentication.
-
-    This is the endpoint that GTBank/MTN would call.
-    Rate limited to 1000 requests per hour per API key.
-    Returns minimal response.
-    """
+    """External API key endpoint for enterprise integrations (GTBank, MTN, etc.)."""
     try:
-        # Validate message type
         if request.message_type not in ["sms", "whatsapp", "transcript"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid message_type"
-            )
+            raise HTTPException(status_code=400, detail="Invalid message_type")
 
-        # Run AI analysis
         ai_result = await analyse_message(
             content=request.content,
             message_type=request.message_type,
-            sender=request.sender
+            sender=request.sender,
         )
 
-        # Apply contextual risk scoring
         risk_context = calculate_contextual_risk(
             base_score=ai_result["risk_score"],
             sender=request.sender or "",
-            db=db
+            db=db,
         )
-
         threat_level = get_threat_level(risk_context["final_score"])
 
-        # Save result
         scan_result = ScanResult(
             user_id=current_user.id,
             message_type=MessageType(request.message_type),
@@ -488,39 +469,26 @@ async def scan_via_api_key(
             flags=ai_result.get("flags", []),
             action=ScanAction(ai_result.get("action", "REVIEW")),
             ai_reasoning=ai_result.get("reasoning", ""),
-            confirmed=False
+            confirmed=False,
         )
-
         db.add(scan_result)
         db.commit()
 
-        # Log scan
-        log_audit(
-            db=db,
-            user_id=current_user.id,
-            action="API_SCAN",
-            resource="scan_results",
-            details=f"API scan from {current_user.organisation or current_user.email}"
-        )
+        log_audit(db=db, user_id=current_user.id, action="API_SCAN",
+                  resource="scan_results",
+                  details=f"API scan from {current_user.organisation or current_user.email}")
 
-        # Return minimal response
         return {
             "risk_score": risk_context["final_score"],
             "threat_level": threat_level,
             "action": ai_result.get("action", "REVIEW"),
-            "flags": ai_result.get("flags", [])
+            "flags": ai_result.get("flags", []),
+            "reasoning": ai_result.get("reasoning", ""),
+            "source": ai_result.get("source", "gpt+calibration"),
         }
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"API scan failed: {str(e)}"
-        )
-
-
-# --- Model Evaluation Endpoint ---
-# (moved above /{scan_id} earlier so route matching works correctly)
-
+        raise HTTPException(status_code=500, detail=f"API scan failed: {str(e)}")
