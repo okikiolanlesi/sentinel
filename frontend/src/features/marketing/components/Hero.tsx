@@ -1,7 +1,7 @@
 import { ArrowRight, Play, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 
 const threats = [
   {
@@ -98,19 +98,20 @@ export default function Hero() {
         </div>
       </div>
 
-      <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
-        <DialogContent className="max-w-3xl p-0 bg-slate-900 border-slate-700">
+      <Dialog
+        open={demoOpen}
+        onClose={() => setDemoOpen(false)}
+        title="Sentinel Demo"
+      >
+        <div className=" p-0 bg-slate-900 border-slate-700">
           <iframe
             src="https://drive.google.com/file/d/1Glf9wuhvQKbfROXl9knFVVSUw_KHRA-x/preview"
             className="w-full aspect-video rounded"
             allow="autoplay; encrypted-media"
             allowFullScreen
           />
-        </DialogContent>
-
+        </div>
       </Dialog>
-
-
     </section>
   );
 }
