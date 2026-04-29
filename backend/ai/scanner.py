@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 """
 SentinelAI — Scam Detection Engine v2 (Hardened)
 =================================================
@@ -35,7 +37,7 @@ def get_client() -> AzureOpenAI:
         _client_instance = AzureOpenAI(
             azure_endpoint=os.getenv("AZURE_ENDPOINT", "https://placeholder.azure.com"),
             api_key=os.getenv("AZURE_API_KEY", "placeholder"),
-            api_version=os.getenv("AZURE_API_VERSION", "2025-01-01-preview"),
+            api_version=os.getenv("AZURE_API_VERSION", "2024-02-01"),
         )
     return _client_instance
 
@@ -189,7 +191,7 @@ async def _call_gpt(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_completion_tokens=500,
+        max_tokens=500,
         temperature=temperature,
         response_format={"type": "json_object"},
     )
@@ -276,8 +278,8 @@ async def analyse_message(
         logger.error(f"JSON parse error: {e}")
         return DEFAULT_MEDIUM_RISK
     except Exception as e:
-        logger.error(f"Analysis failed: {e}")
-        return DEFAULT_MEDIUM_RISK
+    print("ERROR:", e)
+    raise e
 
 
 def _shape_result(r: Dict[str, Any]) -> dict:
