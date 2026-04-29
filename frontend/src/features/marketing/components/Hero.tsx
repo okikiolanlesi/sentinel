@@ -1,5 +1,7 @@
 import { ArrowRight, Play, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const threats = [
   {
@@ -38,6 +40,7 @@ const threats = [
 ];
 
 export default function Hero() {
+  const [demoOpen, setDemoOpen] = useState(false);
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden bg-slate-950">
       <div className="absolute inset-0 pointer-events-none">
@@ -71,6 +74,7 @@ export default function Hero() {
             <Button
               variant="outline"
               className="border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800 hover:text-white h-11 px-6 text-sm gap-2"
+              onClick={() => setDemoOpen(true)}
             >
               <Play className="size-3.5 fill-current" />
               Watch Demo
@@ -93,6 +97,20 @@ export default function Hero() {
           </div>
         </div>
       </div>
+
+      <Dialog open={demoOpen} onOpenChange={setDemoOpen}>
+        <DialogContent className="max-w-3xl p-0 bg-slate-900 border-slate-700">
+          <iframe
+            src="https://drive.google.com/file/d/1Glf9wuhvQKbfROXl9knFVVSUw_KHRA-x/preview"
+            className="w-full aspect-video rounded"
+            allow="autoplay; encrypted-media"
+            allowFullScreen
+          />
+        </DialogContent>
+
+      </Dialog>
+
+
     </section>
   );
 }
