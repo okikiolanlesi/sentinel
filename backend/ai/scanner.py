@@ -278,8 +278,8 @@ async def analyse_message(
         logger.error(f"JSON parse error: {e}")
         return DEFAULT_MEDIUM_RISK
     except Exception as e:
-    print("ERROR:", e)
-    raise e
+        print("ERROR:", e)
+        raise e
 
 
 def _shape_result(r: Dict[str, Any]) -> dict:
