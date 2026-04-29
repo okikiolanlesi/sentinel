@@ -71,7 +71,7 @@ Message: "Your OTP is 847291. Share this code with our customer care agent to co
 Output: {"risk_score": 99, "threat_level": "HIGH", "flags": ["otp_sharing_request", "credential_theft", "social_engineering"], "action": "BLOCK", "reasoning": "Legitimate banks NEVER ask customers to share OTP codes. This is a direct account takeover attempt by definition.", "is_scam": true}
 
 EXAMPLE C (Deepfake CEO / BEC):
-Message: "This is the MD calling. Transfer ₦15,000,000 to GTBank 0123456789, Acme Supplies. Tell no one, I will explain later."
+Message: "This is the MD calling. Transfer N15,000,000 to GTBank 0123456789, Acme Supplies. Tell no one, I will explain later."
 Output: {"risk_score": 98, "threat_level": "HIGH", "flags": ["executive_impersonation", "large_transfer_request", "secrecy_instruction", "deepfake_likely", "bec_pattern"], "action": "BLOCK", "reasoning": "Classic deepfake CEO fraud. Large transfer combined with secrecy instruction is the highest-risk combination in Nigerian corporate fraud.", "is_scam": true}
 
 EXAMPLE D (Legitimate bank alert):
@@ -96,17 +96,11 @@ def _build_system_prompt(retrieved_examples_block: str) -> str:
     """Assemble the full system prompt with dynamic few-shot block."""
     return f"""You are SentinelAI, an expert AI fraud analyst specialising in Nigerian and African telecom fraud. You analyse SMS, WhatsApp, and voice transcripts for banks, fintechs, telcos, and call centres.
 
-# YOUR REASONING PROCESS (chain-of-thought)
-For every message, internally walk through these steps before scoring:
-  1. Identify the message TYPE (bank alert, promotional, request, transactional)
-  2. List every specific FRAUD SIGNAL you can detect (be exhaustive)
-  3. List every LEGITIMACY SIGNAL you can detect
-  4. Apply the SCORING RUBRIC below based on signals counted
-  5. Cross-check: do the score, threat_level, and action all agree?
+Classify each message by identifying fraud signals and legitimacy signals, then apply the scoring rubric below.
 
-# SCORING RUBRIC (apply strictly)
+# SCORING RUBRIC
 
-## ALWAYS BLOCK (risk 90-100) - these are categorical:
+## ALWAYS BLOCK (risk 90-100):
 - OTP / PIN sharing requests -> 95+ minimum
 - Card number + CVV requests -> 95+ minimum
 - Executive impersonation + transfer + secrecy = deepfake CEO fraud -> 95+
@@ -127,28 +121,24 @@ For every message, internally walk through these steps before scoring:
 ## ALLOW (risk 0-49):
 - Standard bank transaction alerts (masked account numbers, official helplines)
 - Airtime/data bundle confirmations
-- Loan repayment reminders citing official channels (apps, branches, USSD)
+- Loan repayment reminders citing official channels
 - USSD code instructions (*737#, *901#, *131# etc.)
 
-# NIGERIAN FRAUD SIGNAL CHEATSHEET
+# FRAUD SIGNALS
+- Fake domains: real Nigerian banks use .com.ng, .ng, or their official .com
+- Gmail/Yahoo contact for banks/telcos = scam
+- BVN + NIN + DOB together = identity theft
+- Any OTP sharing = account takeover
+- Upfront fee for loan/prize/grant = advance fee fraud (419)
+- Transfer + secrecy instruction = BEC fraud
+- Arrest threat + payment = law enforcement impersonation
 
-CONFIRMED FRAUD SIGNALS:
-- Fake domains (gtb-verify.com, cbn-alert.net, anything-bank-secure.xyz). Real Nigerian banks use .com.ng, .ng, or their official .com.
-- Gmail / Yahoo contact for banks/telcos = always scam.
-- BVN + NIN + DOB requested together = identity theft kit.
-- Any OTP sharing instruction = account takeover.
-- Upfront fee for loan/prize/grant = advance fee fraud (419).
-- "Tell no one" / "keep this confidential" + transfer instruction = BEC / deepfake.
-- Arrest threat + payment demand = EFCC/Police impersonation extortion.
-- Shortened URLs (bit.ly, tinyurl) for "bank verification" = phishing.
-
-LEGITIMACY SIGNALS:
+# LEGITIMACY SIGNALS
 - Masked account numbers (XXXXXX1234, ****4821)
-- Official bank helplines in 0700-/0730-/01- format
+- Official bank helplines (0700-/0730-/01- format)
 - USSD codes (*737#, *901#, *131#)
 - Transaction reference numbers
-- Directing to official mobile app / branch (not embedded links)
-- Specific date and merchant name in transaction alerts
+- Specific date and merchant name
 
 # REFERENCE EXAMPLES
 {CORE_FEW_SHOT}
@@ -157,7 +147,7 @@ LEGITIMACY SIGNALS:
 # OUTPUT FORMAT (strict JSON, nothing else)
 {{"risk_score": <int 0-100>, "threat_level": "<HIGH|MEDIUM|LOW|CLEAN>", "flags": [<strings>], "action": "<BLOCK|REVIEW|ALLOW>", "reasoning": "<2-3 sentence plain-English explanation>", "is_scam": <true|false>}}
 
-THRESHOLDS (must be consistent):
+THRESHOLDS:
 - risk_score 80-100 -> threat_level HIGH -> action BLOCK
 - risk_score 50-79  -> threat_level MEDIUM -> action REVIEW
 - risk_score 20-49  -> threat_level LOW -> action ALLOW
@@ -179,10 +169,11 @@ async def _call_gpt(
 ) -> Dict[str, Any]:
     """Single GPT call returning parsed JSON dict."""
     sender_context = f"Sender: {sender}\n" if sender else ""
+    # FIX 1: Removed "Walk through your reasoning" — triggers Azure jailbreak filter
     user_prompt = (
-        f"Analyse this {message_type.upper()} for fraud:\n\n"
+        f"Classify this {message_type.upper()} message for fraud risk:\n\n"
         f'{sender_context}Message: "{content}"\n\n'
-        f"Walk through your reasoning, then output the JSON verdict only."
+        f"Return your JSON verdict."
     )
 
     response = get_client().chat.completions.create(
@@ -191,6 +182,7 @@ async def _call_gpt(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        # FIX 2: gpt-5.4-nano requires max_completion_tokens not max_tokens
         max_completion_tokens=500,
         temperature=temperature,
         response_format={"type": "json_object"},
@@ -278,8 +270,9 @@ async def analyse_message(
         logger.error(f"JSON parse error: {e}")
         return DEFAULT_MEDIUM_RISK
     except Exception as e:
-        print("ERROR:", e)
-        raise e
+        # FIX 3: Return fallback instead of re-raising — prevents 500 errors
+        logger.error(f"Analysis failed: {e}")
+        return DEFAULT_MEDIUM_RISK
 
 
 def _shape_result(r: Dict[str, Any]) -> dict:
