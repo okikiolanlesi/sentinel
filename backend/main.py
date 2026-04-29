@@ -162,14 +162,3 @@ async def root():
         "health": "/health"
     }
 
-
-# Main entry point
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True if ENVIRONMENT == "development" else False,
-        log_level="info"
-    )
