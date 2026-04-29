@@ -1,49 +1,72 @@
-// TODO: Replace mock implementations with real http calls when backend is ready
-// import { http } from '@/lib/http'
-import type { AuthResponse, SignInPayload, SignUpPayload } from '@/features/auth/types'
-import { MOCK_CREDENTIALS } from '@/features/auth/constants'
+import { http } from '@/lib/http'
+import type { AuthResponse, AuthUser, SignInPayload, SignUpPayload, UserRole } from '@/features/auth/types'
 
-const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+interface ApiUserData {
+  id: string
+  email: string
+  full_name: string
+  organisation: string
+  role: UserRole
+  is_active: boolean
+  created_at?: string
+  last_login?: string
+}
+
+interface ApiAuthResponse {
+  access_token: string
+  token_type: string
+  user: ApiUserData
+}
+
+export interface ApiKeyResponse {
+  message: string
+  api_key: string
+  warning: string
+}
+
+function mapApiUser(u: ApiUserData): AuthUser {
+  const spaceIdx = u.full_name?.indexOf(' ') ?? -1
+  const firstName = spaceIdx === -1 ? (u.full_name ?? '') : u.full_name.slice(0, spaceIdx)
+  const lastName = spaceIdx === -1 ? '' : u.full_name.slice(spaceIdx + 1)
+  return {
+    id: u.id,
+    email: u.email,
+    firstName,
+    lastName,
+    role: u.role,
+    organization: u.organisation,
+    isActive: u.is_active,
+    createdAt: u.created_at,
+    lastLogin: u.last_login,
+  }
+}
 
 export const authService = {
   async signIn(payload: SignInPayload): Promise<AuthResponse> {
-    // return http.post<AuthResponse>('/auth/sign-in', payload).then(r => r.data)
-    await delay(900)
-
-    if (
-      payload.email === MOCK_CREDENTIALS.email &&
-      payload.password === MOCK_CREDENTIALS.password
-    ) {
-      return {
-        user: {
-          id: 'usr_demo_001',
-          email: payload.email,
-          firstName: 'Demo',
-          lastName: 'Admin',
-          role: 'admin',
-          organization: 'Sentinel Demo Org',
-        },
-        token: 'mock.jwt.token.demo',
-      }
-    }
-
-    throw new Error('Invalid email or password')
+    const { data } = await http.post<ApiAuthResponse>('/api/auth/login', {
+      email: payload.email,
+      password: payload.password,
+    })
+    return { user: mapApiUser(data.user), token: data.access_token }
   },
 
   async signUp(payload: SignUpPayload): Promise<AuthResponse> {
-    // return http.post<AuthResponse>('/auth/sign-up', payload).then(r => r.data)
-    await delay(1100)
+    const { data } = await http.post<ApiAuthResponse>('/api/auth/register', {
+      email: payload.email,
+      password: payload.password,
+      full_name: `${payload.firstName} ${payload.lastName}`.trim(),
+      organisation: payload.organizationName,
+    })
+    return { user: mapApiUser(data.user), token: data.access_token }
+  },
 
-    return {
-      user: {
-        id: `usr_${crypto.randomUUID().slice(0, 8)}`,
-        email: payload.email,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        role: 'admin',
-        organization: payload.organizationName,
-      },
-      token: `mock.jwt.token.${Math.random().toString(36).slice(2)}`,
-    }
+  async getCurrentUser(): Promise<AuthUser> {
+    const { data } = await http.get<ApiUserData>('/api/auth/me')
+    return mapApiUser(data)
+  },
+
+  async generateApiKey(): Promise<ApiKeyResponse> {
+    const { data } = await http.post<ApiKeyResponse>('/api/auth/generate-key')
+    return data
   },
 }

@@ -1,13 +1,11 @@
-import Navbar from './components/Navbar'
-import Hero from './components/Hero'
-import TrustBar from './components/TrustBar'
-import Features from './components/Features'
-import HowItWorks from './components/HowItWorks'
-import Stats from './components/Stats'
-import UseCases from './components/UseCases'
-import Integration from './components/Integration'
-import CallToAction from './components/CallToAction'
-import Footer from './components/Footer'
+import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import TrustBar from "./components/TrustBar";
+import Features from "./components/Features";
+import HowItWorks from "./components/HowItWorks";
+import UseCases from "./components/UseCases";
+import Integration from "./components/Integration";
+import Footer from "./components/Footer";
 
 export default function LandingPage() {
   return (
@@ -17,11 +15,9 @@ export default function LandingPage() {
       <TrustBar />
       <Features />
       <HowItWorks />
-      <Stats />
       <UseCases />
       <Integration />
-      <CallToAction />
       <Footer />
     </div>
-  )
+  );
 }

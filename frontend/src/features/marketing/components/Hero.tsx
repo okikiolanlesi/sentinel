@@ -1,41 +1,41 @@
-import { ArrowRight, Play, ShieldCheck } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ArrowRight, Play, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const threats = [
   {
     id: 1,
-    channel: 'SMS',
-    channelColor: 'bg-blue-500/15 text-blue-400',
-    identifier: '+234-701-234-5678',
-    content: 'Win free airtime! Click bit.ly/claim-now to redeem...',
+    channel: "SMS",
+    channelColor: "bg-blue-500/15 text-blue-400",
+    identifier: "+234-701-234-5678",
+    content: "Win free airtime! Click bit.ly/claim-now to redeem...",
     score: 87,
-    barColor: 'bg-red-500',
-    action: 'BLOCKED',
-    actionColor: 'bg-red-500/15 text-red-400',
+    barColor: "bg-red-500",
+    action: "BLOCKED",
+    actionColor: "bg-red-500/15 text-red-400",
   },
   {
     id: 2,
-    channel: 'WhatsApp',
-    channelColor: 'bg-emerald-500/15 text-emerald-400',
-    identifier: '+1-555-987-6543',
-    content: 'Your bank account has been suspended. Verify now...',
+    channel: "WhatsApp",
+    channelColor: "bg-emerald-500/15 text-emerald-400",
+    identifier: "+1-555-987-6543",
+    content: "Your bank account has been suspended. Verify now...",
     score: 95,
-    barColor: 'bg-red-500',
-    action: 'BLOCKED',
-    actionColor: 'bg-red-500/15 text-red-400',
+    barColor: "bg-red-500",
+    action: "BLOCKED",
+    actionColor: "bg-red-500/15 text-red-400",
   },
   {
     id: 3,
-    channel: 'Voice',
-    channelColor: 'bg-purple-500/15 text-purple-400',
-    identifier: '+44-7700-900123',
-    content: 'Deepfake audio pattern detected — 94% confidence',
+    channel: "Voice",
+    channelColor: "bg-purple-500/15 text-purple-400",
+    identifier: "+44-7700-900123",
+    content: "Deepfake audio pattern detected — 94% confidence",
     score: 82,
-    barColor: 'bg-amber-500',
-    action: 'FLAGGED',
-    actionColor: 'bg-amber-500/15 text-amber-400',
+    barColor: "bg-amber-500",
+    action: "FLAGGED",
+    actionColor: "bg-amber-500/15 text-amber-400",
   },
-]
+];
 
 export default function Hero() {
   return (
@@ -55,23 +55,19 @@ export default function Hero() {
           </div>
 
           <h1 className="text-5xl sm:text-6xl font-bold leading-[1.1] text-white mb-6 tracking-tight">
-            Stop Telecom Fraud{' '}
+            Stop Telecom Fraud{" "}
             <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
               Before It Strikes
             </span>
           </h1>
 
           <p className="text-lg text-slate-400 leading-relaxed mb-8 max-w-lg">
-            Sentinel uses large language models and AI signal analysis to detect scam messages,
-            deepfake voice calls, and social engineering attacks in real time — protecting your
-            customers before threats reach them.
+            Sentinel uses large language models and AI signal analysis to detect
+            scam messages, deepfake voice calls, and social engineering attacks
+            in real time — protecting your customers before threats reach them.
           </p>
 
           <div className="flex flex-wrap gap-3 mb-10">
-            <Button className="bg-blue-600 hover:bg-blue-500 text-white border-0 shadow-lg shadow-blue-500/25 h-11 px-6 text-sm">
-              Request a Demo
-              <ArrowRight className="size-4" />
-            </Button>
             <Button
               variant="outline"
               className="border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800 hover:text-white h-11 px-6 text-sm gap-2"
@@ -96,67 +92,7 @@ export default function Hero() {
             </div>
           </div>
         </div>
-
-        <div className="relative">
-          <div className="absolute -inset-4 bg-blue-500/5 rounded-3xl blur-xl" />
-          <div className="relative bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-800/60 border-b border-slate-700/50">
-              <div className="flex items-center gap-2">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-semibold text-slate-200 tracking-wide">
-                  Live Threat Monitor
-                </span>
-              </div>
-              <span className="text-xs text-slate-500 font-mono">4,271 blocked today</span>
-            </div>
-
-            <div className="divide-y divide-slate-800/80">
-              {threats.map((t) => (
-                <div key={t.id} className="px-4 py-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span
-                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded tracking-wide ${t.channelColor}`}
-                        >
-                          {t.channel}
-                        </span>
-                        <span className="text-xs text-slate-500 font-mono truncate">
-                          {t.identifier}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 truncate mb-2.5">"{t.content}"</p>
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${t.barColor}`}
-                            style={{ width: `${t.score}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                          {t.score}/100
-                        </span>
-                      </div>
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 tracking-wider ${t.actionColor}`}
-                    >
-                      {t.action}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="px-4 py-3 bg-slate-800/30 border-t border-slate-700/50 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500">Powered by Azure OpenAI</span>
-              <span className="text-[10px] text-emerald-400 font-semibold tracking-wide">
-                99.2% detection accuracy
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
-  )
+  );
 }

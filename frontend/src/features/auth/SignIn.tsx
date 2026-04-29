@@ -160,11 +160,6 @@ export default function SignIn() {
             </p>
           </div>
 
-          <div className="mb-6 px-3.5 py-3 rounded-lg bg-blue-500/8 border border-blue-500/20 text-xs text-blue-400 leading-relaxed">
-            <span className="font-semibold">Demo credentials —</span>{" "}
-            {MOCK_CREDENTIALS.email} / {MOCK_CREDENTIALS.password}
-          </div>
-
           {serverError && (
             <div className="mb-5 flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-red-500/8 border border-red-500/20 text-sm text-red-400">
               <AlertCircle className="size-4 shrink-0 mt-0.5" />
