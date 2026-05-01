@@ -203,7 +203,7 @@ curl -X POST https://your-backend/api/scan/api \
 
 | Member | Module |
 |---|---|
-| Ndubuisi Ekeh | AI and backend core — scam detection, risk scoring, Semantic Kernel |
+| Ndubuisi Ekeh | AI and backend core — scam detection, risk scoring, Api, Semantic Kernel |
 | Okikiola Osunronbi | Frontend and ui |
 | Ifunanya Ugwoke | Landing page, UI/UX, presentation |
 
