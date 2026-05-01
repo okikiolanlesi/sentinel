@@ -201,15 +201,11 @@ curl -X POST https://your-backend/api/scan/api \
 
 ## Team & module ownership
 
-| Member | Module | Issues |
-|---|---|---|
-| Ndubuisi Ekeh | AI core — scam detection, risk scoring, Semantic Kernel | #1 #2 #3 #4 #7 |
-| Olusegun Adelowo | Admin dashboard + KPI analytics UI | #14 #15 |
-| Adedapo Adeniran | Auth system — login, RBAC, JWT | #5 #6 #7 |
-| Okikiola Osunronbi | Database schema, logging, audit trail | #8 #9 |
-| Abdul Samad Zen-Abdeen | Deepfake voice detection module | #10 #11 |
-| Gbolahan Kolawole | User management module | #12 #13 |
-| Ifunanya Ugwoke | Landing page, UI/UX, presentation | #16 #17 |
+| Member | Module |
+|---|---|
+| Ndubuisi Ekeh | AI and backend core — scam detection, risk scoring, Semantic Kernel |
+| Okikiola Osunronbi | Frontend and ui |
+| Ifunanya Ugwoke | Landing page, UI/UX, presentation |
 
 ---
 
