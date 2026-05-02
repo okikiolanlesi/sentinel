@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios from "axios";
 
 // Base URL points at the backend root. Service files use full paths like '/api/auth/login'.
 // In production set VITE_API_URL=https://your-deployed-backend.com
@@ -18,8 +18,8 @@ http.interceptors.request.use((config) => {
   } catch {
     // ignore parse errors
   }
-  return config
-})
+  return config;
+});
 
 http.interceptors.response.use(
   (res) => res,
@@ -32,6 +32,6 @@ http.interceptors.response.use(
         window.location.href = '/sign-in'
       }
     }
-    return Promise.reject(err)
+    return Promise.reject(err);
   },
-)
+);

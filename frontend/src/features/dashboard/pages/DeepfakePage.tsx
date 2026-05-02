@@ -109,7 +109,6 @@ export default function DeepfakePage() {
         </p>
       </div>
 
-      {/* Upload */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-8">
         <div className="flex items-center gap-2 mb-4">
           <Mic className="size-4 text-purple-400" />
@@ -179,7 +178,6 @@ export default function DeepfakePage() {
         )}
       </div>
 
-      {/* History */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl">
         <div className="px-5 py-4 border-b border-slate-800">
           <h2 className="text-sm font-semibold text-white">Voice analysis history</h2>

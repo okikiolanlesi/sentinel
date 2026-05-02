@@ -18,9 +18,7 @@ const roleStyles: Record<UserRole, string> = {
 
 function RoleBadge({ role }: { role: UserRole }) {
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-semibold tracking-wide uppercase ${roleStyles[role]}`}
-    >
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-semibold tracking-wide uppercase ${roleStyles[role]}`}>
       {role}
     </span>
   )
@@ -89,17 +87,11 @@ function InviteModal({ onClose }: { onClose: () => void }) {
                 <p className="text-sm text-white font-mono">{result.temporary_credentials.email}</p>
               </div>
               <div>
-                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">
-                  Temporary password
-                </p>
-                <p className="text-sm text-white font-mono break-all">
-                  {result.temporary_credentials.temporary_password}
-                </p>
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider mb-0.5">Temporary password</p>
+                <p className="text-sm text-white font-mono break-all">{result.temporary_credentials.temporary_password}</p>
               </div>
             </div>
-            <p className="text-xs text-amber-400 leading-relaxed">
-              ⚠ {result.temporary_credentials.warning}
-            </p>
+            <p className="text-xs text-amber-400 leading-relaxed">⚠ {result.temporary_credentials.warning}</p>
             <div className="flex gap-2">
               <Button onClick={copyCreds} className="bg-slate-800 hover:bg-slate-700 text-white border-0 h-9 px-3 text-sm flex-1">
                 <Copy className="size-3.5 mr-1.5" />
@@ -139,9 +131,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
                 className="w-full h-10 bg-slate-950 border border-slate-700 rounded-md px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 capitalize"
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+                  <option key={r} value={r}>{r}</option>
                 ))}
               </select>
             </div>
@@ -200,9 +190,7 @@ export default function UserManagementPage() {
       <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">User Management</h1>
-          <p className="text-slate-500 text-sm">
-            Manage team members, roles, and access. Admin only.
-          </p>
+          <p className="text-slate-500 text-sm">Manage team members, roles, and access. Admin only.</p>
         </div>
         <Button
           onClick={() => setShowInvite(true)}
@@ -242,9 +230,7 @@ export default function UserManagementPage() {
             {list.data?.users.map((user) => (
               <div
                 key={user.id}
-                className={`px-5 py-3 transition-colors ${
-                  user.is_active ? 'hover:bg-slate-800/30' : 'opacity-50'
-                }`}
+                className={`px-5 py-3 transition-colors ${user.is_active ? 'hover:bg-slate-800/30' : 'opacity-50'}`}
               >
                 <div className="flex items-center gap-4">
                   <div className="size-9 rounded-full bg-linear-to-br from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
@@ -252,38 +238,28 @@ export default function UserManagementPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-white truncate">
-                        {user.full_name || user.email}
-                      </span>
+                      <span className="text-sm font-medium text-white truncate">{user.full_name || user.email}</span>
                       <RoleBadge role={user.role} />
                       {!user.is_active && (
-                        <span className="text-[10px] uppercase tracking-wider text-rose-400 font-bold">
-                          Deactivated
-                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-rose-400 font-bold">Deactivated</span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5">
                       <span className="text-xs text-slate-500 truncate">{user.email}</span>
                       {user.last_login && (
-                        <span className="text-xs text-slate-600">
-                          · last seen {formatRelativeTime(user.last_login)}
-                        </span>
+                        <span className="text-xs text-slate-600">· last seen {formatRelativeTime(user.last_login)}</span>
                       )}
                     </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
                     <select
                       value={user.role}
-                      onChange={(e) =>
-                        changeRole.mutate({ userId: user.id, role: e.target.value as UserRole })
-                      }
+                      onChange={(e) => changeRole.mutate({ userId: user.id, role: e.target.value as UserRole })}
                       disabled={!user.is_active || changeRole.isPending}
                       className="h-8 bg-slate-950 border border-slate-700 rounded-md px-2 text-xs text-white capitalize disabled:opacity-50 focus:outline-none focus:border-blue-500/60"
                     >
                       {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
+                        <option key={r} value={r}>{r}</option>
                       ))}
                     </select>
                     <button

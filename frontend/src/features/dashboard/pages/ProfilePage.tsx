@@ -27,7 +27,6 @@ export default function ProfilePage() {
     queryFn: usersService.getMe,
   })
 
-  // Sync form state when query loads
   useEffect(() => {
     if (me.data) {
       setFullName(me.data.full_name ?? '')
@@ -43,7 +42,6 @@ export default function ProfilePage() {
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['users', 'me'] })
-      // Refresh the auth store with new name/org so the sidebar updates
       if (token) setAuth(mapBackendUser(data), token)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2500)
@@ -166,7 +164,6 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Hide the unused-warning import compiler thing — user is consumed through useAuthStore destructure already. */}
       <span className="hidden">{user?.id}</span>
     </div>
   )

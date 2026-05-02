@@ -46,8 +46,6 @@ const NEXT_STATUSES: Record<ThreatStatus, ThreatStatus[]> = {
   closed: [],
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
 function StatusBadge({
   status,
   scanId,
@@ -267,7 +265,6 @@ function ScanResultCard({
             <button
               onClick={() => setShowEscalate(true)}
               className="flex items-center gap-1 px-2 py-1 text-[11px] text-red-400 border border-red-500/20 rounded-md hover:bg-red-500/10 transition-colors"
-              title="Escalate"
             >
               <ArrowUpCircle className="size-3" />
               Escalate
@@ -276,7 +273,6 @@ function ScanResultCard({
           <button
             onClick={() => setShowCorrect(true)}
             className="flex items-center gap-1 px-2 py-1 text-[11px] text-amber-400 border border-amber-500/20 rounded-md hover:bg-amber-500/10 transition-colors"
-            title="Mark as incorrect"
           >
             <PenLine className="size-3" />
             Correct
@@ -287,10 +283,7 @@ function ScanResultCard({
       {result.flags.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {result.flags.map((flag) => (
-            <span
-              key={flag}
-              className="text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20"
-            >
+            <span key={flag} className="text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
               {flag}
             </span>
           ))}
@@ -298,7 +291,6 @@ function ScanResultCard({
       )}
 
       <p className="text-sm text-slate-300 leading-relaxed">{result.reasoning}</p>
-
       <SuggestedActions actions={result.suggested_actions || []} />
 
       {showEscalate && (
@@ -310,8 +302,6 @@ function ScanResultCard({
     </div>
   )
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 type TabKey = 'scan' | 'escalations'
 
@@ -397,9 +387,7 @@ export default function ThreatsPage() {
       <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Threats</h1>
-          <p className="text-slate-500 text-sm">
-            Scan messages live and manage the full threat lifecycle.
-          </p>
+          <p className="text-slate-500 text-sm">Scan messages live and manage the full threat lifecycle.</p>
         </div>
         {isAdmin && (
           <Button
@@ -416,7 +404,6 @@ export default function ThreatsPage() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-800">
         {([['scan', 'Scan & History'], ['escalations', 'Escalations']] as [TabKey, string][]).map(([key, label]) => (
           <button
@@ -435,7 +422,6 @@ export default function ThreatsPage() {
 
       {tab === 'scan' && (
         <>
-          {/* Live scanner */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-8">
             <div className="flex items-center gap-2 mb-4">
               <ShieldAlert className="size-4 text-blue-400" />
@@ -504,12 +490,10 @@ export default function ThreatsPage() {
             )}
           </div>
 
-          {/* History */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-sm font-semibold text-white">Scan history</h2>
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Status filter */}
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as ThreatStatus | 'ALL')}
@@ -519,7 +503,6 @@ export default function ThreatsPage() {
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-                {/* Threat level filter */}
                 <div className="flex items-center gap-1">
                   {THREAT_FILTERS.map((filter) => (
                     <button
@@ -535,11 +518,7 @@ export default function ThreatsPage() {
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={handleRefresh}
-                  className="text-slate-500 hover:text-slate-300 transition-colors"
-                  title="Refresh"
-                >
+                <button onClick={handleRefresh} className="text-slate-500 hover:text-slate-300 transition-colors" title="Refresh">
                   <RefreshCw className="size-3.5" />
                 </button>
               </div>
@@ -581,26 +560,12 @@ export default function ThreatsPage() {
                             ))}
                           </div>
                         )}
-                        {/* Suggested actions inline (compact) */}
                         {item.suggested_actions && item.suggested_actions.length > 0 && (
                           <SuggestedActions actions={item.suggested_actions} />
                         )}
                       </div>
-                      <div className="shrink-0 flex flex-col items-end gap-2">
+                      <div className="shrink-0">
                         <ScoreBar score={item.risk_score} />
-                        <div className="flex gap-1">
-                          {item.threat_status !== 'escalated' && item.threat_status !== 'closed' && (
-                            <button
-                              onClick={() => {
-                                const el = document.getElementById(`esc-${item.id}`)
-                                if (el) el.click()
-                              }}
-                              className="text-[10px] px-1.5 py-0.5 rounded border border-red-500/20 text-red-400 hover:bg-red-500/10"
-                            >
-                              Escalate
-                            </button>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>

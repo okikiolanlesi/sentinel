@@ -228,47 +228,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-        <KpiCard
-          label="Total Scanned"
-          value={isLoading ? '—' : formatNumber(stats.data?.total_scanned ?? 0)}
-          icon={Activity}
-          accent="bg-blue-500/15 text-blue-400"
-        />
-        <KpiCard
-          label="Threats"
-          value={isLoading ? '—' : formatNumber(stats.data?.threats_detected ?? 0)}
-          icon={AlertTriangle}
-          accent="bg-red-500/15 text-red-400"
-        />
-        <KpiCard
-          label="Deepfakes"
-          value={isLoading ? '—' : formatNumber(stats.data?.deepfakes_found ?? 0)}
-          icon={ScanFace}
-          accent="bg-purple-500/15 text-purple-400"
-        />
-        <KpiCard
-          label="Avg Risk"
-          value={isLoading ? '—' : (stats.data?.avg_risk_score ?? 0).toFixed(0)}
-          icon={Shield}
-          accent="bg-amber-500/15 text-amber-400"
-        />
-        <KpiCard
-          label="Blocked Today"
-          value={isLoading ? '—' : formatNumber(stats.data?.blocked_today ?? 0)}
-          icon={Ban}
-          accent="bg-rose-500/15 text-rose-400"
-        />
-        <KpiCard
-          label="Active Campaigns"
-          value={isLoading ? '—' : (stats.data?.active_campaigns ?? 0).toString()}
-          icon={Radio}
-          accent="bg-emerald-500/15 text-emerald-400"
-        />
+        <KpiCard label="Total Scanned" value={isLoading ? '—' : formatNumber(stats.data?.total_scanned ?? 0)} icon={Activity} accent="bg-blue-500/15 text-blue-400" />
+        <KpiCard label="Threats" value={isLoading ? '—' : formatNumber(stats.data?.threats_detected ?? 0)} icon={AlertTriangle} accent="bg-red-500/15 text-red-400" />
+        <KpiCard label="Deepfakes" value={isLoading ? '—' : formatNumber(stats.data?.deepfakes_found ?? 0)} icon={ScanFace} accent="bg-purple-500/15 text-purple-400" />
+        <KpiCard label="Avg Risk" value={isLoading ? '—' : (stats.data?.avg_risk_score ?? 0).toFixed(0)} icon={Shield} accent="bg-amber-500/15 text-amber-400" />
+        <KpiCard label="Blocked Today" value={isLoading ? '—' : formatNumber(stats.data?.blocked_today ?? 0)} icon={Ban} accent="bg-rose-500/15 text-rose-400" />
+        <KpiCard label="Active Campaigns" value={isLoading ? '—' : (stats.data?.active_campaigns ?? 0).toString()} icon={Radio} accent="bg-emerald-500/15 text-emerald-400" />
       </div>
 
-      {/* Threat-level breakdown */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
         <h2 className="text-sm font-semibold text-white mb-4">Threat-level breakdown</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -283,14 +251,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Intelligence row: health + memory + corrections */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <HealthWidget />
         <OrgMemoryWidget />
         <CorrectionsWidget />
       </div>
 
-      {/* Threat feed */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl">
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
           <div>

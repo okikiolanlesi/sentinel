@@ -147,7 +147,6 @@ export default function ApiKeysPage() {
         )}
       </div>
 
-      {/* Integration example */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 className="text-sm font-semibold text-white mb-3">Integration example</h2>
         <p className="text-xs text-slate-500 mb-3">
